@@ -1,0 +1,83 @@
+# X-Plane asset catalog
+# Maps (building_type × size_bucket) → .fac virtual path
+# Maps (esa_class × koppen_zone) → .for virtual path
+#
+# Köppen zones used: tropical, arid, temperate, continental, polar
+# Size buckets: small (<200 m²), medium (200–1000 m²), large (>1000 m²)
+
+facades:
+  residential:
+    small:   lib/g8/residential_sm.fac
+    medium:  lib/g8/residential_md.fac
+    large:   lib/g8/residential_lg.fac
+  commercial:
+    small:   lib/g8/commercial_sm.fac
+    medium:  lib/g8/commercial_md.fac
+    large:   lib/g8/commercial_lg.fac
+  industrial:
+    small:   lib/g8/industrial_sm.fac
+    medium:  lib/g8/industrial_md.fac
+    large:   lib/g8/industrial_lg.fac
+  religious:
+    small:   lib/g8/religious_sm.fac
+    medium:  lib/g8/religious_md.fac
+    large:   lib/g8/religious_lg.fac
+  agricultural:
+    small:   lib/g8/agricultural_sm.fac
+    medium:  lib/g8/agricultural_md.fac
+    large:   lib/g8/agricultural_lg.fac
+  generic:
+    small:   lib/g8/generic_sm.fac
+    medium:  lib/g8/generic_md.fac
+    large:   lib/g8/generic_lg.fac
+
+forests:
+  # ESA class 10: tree cover
+  tree_cover:
+    tropical:    lib/g8/trees_tropical.for
+    arid:        lib/g8/trees_decid_vhot_dry.for
+    temperate:   lib/g8/trees_decid_tmp_wet.for
+    continental: lib/g8/trees_decid_cld_wet.for
+    polar:       lib/g8/trees_evgr_cld_wet.for
+  # ESA class 20: shrubland
+  shrubland:
+    tropical:    lib/g8/shrb_tmp_rain.for
+    arid:        lib/g8/shrb_cld_dry.for
+    temperate:   lib/g8/shrb_tmp_rain.for
+    continental: lib/g8/shrb_cld_wet.for
+    polar:       lib/g8/shrb_cld_dry.for
+  # ESA class 30: grassland
+  grassland:
+    tropical:    lib/g8/crops_vhot_dry.for
+    arid:        lib/g8/crops_vhot_dry.for
+    temperate:   lib/g8/crops_tmp_wet.for
+    continental: lib/g8/crops_cld_wet.for
+    polar:       lib/g8/crops_cld_wet.for
+  # ESA class 40: cropland
+  cropland:
+    tropical:    lib/g8/crops_vhot_dry.for
+    arid:        lib/g8/crops_vhot_dry.for
+    temperate:   lib/g8/crops_tmp_wet.for
+    continental: lib/g8/crops_cld_wet.for
+    polar:       lib/g8/crops_cld_wet.for
+  # ESA class 90: wetland
+  wetland:
+    tropical:    lib/g8/shrb_tmp_rain.for
+    arid:        lib/g8/shrb_cld_wet.for
+    temperate:   lib/g8/shrb_tmp_rain.for
+    continental: lib/g8/shrb_cld_wet.for
+    polar:       lib/g8/shrb_cld_wet.for
+  # ESA class 95: mangrove
+  mangrove:
+    tropical:    lib/g8/trees_tropical.for
+    arid:        lib/g8/trees_tropical.for
+    temperate:   lib/g8/trees_tropical.for
+    continental: lib/g8/trees_tropical.for
+    polar:       lib/g8/trees_tropical.for
+  # ESA class 100: moss/lichen
+  moss_lichen:
+    tropical:    lib/g8/shrb_cld_dry.for
+    arid:        lib/g8/shrb_cld_dry.for
+    temperate:   lib/g8/shrb_cld_dry.for
+    continental: lib/g8/shrb_cld_dry.for
+    polar:       lib/g8/shrb_cld_dry.for

@@ -23,7 +23,7 @@ dependencies = [
 xplane-gen = "xplane_gen.cli:cli"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-mock>=3.12", "ruff>=0.9", "mypy>=1.11", "types-shapely>=2.0"]
+dev = ["pytest>=8", "pytest-mock>=3.12", "ruff>=0.9", "mypy>=1.11", "types-shapely>=2.0", "types-PyYAML>=6.0"]
 pbf = ["osmium>=3.7"]
 
 [tool.setuptools.packages.find]
