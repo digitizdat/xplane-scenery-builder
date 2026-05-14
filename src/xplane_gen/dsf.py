@@ -211,7 +211,6 @@ def build_overlay(
     east, north = west + 1.0, south + 1.0
     tile_centre_lat = south + 0.5
 
-    has_buildings = False
     has_forests = False
 
     # ── landcover → forest features ──────────────────────────────────
@@ -236,28 +235,18 @@ def build_overlay(
 
     # ── buildings → facade features ──────────────────────────────────
     if buildings_geojson and buildings_geojson.exists():
-        fc = json.loads(buildings_geojson.read_text(encoding="utf-8"))
-        for feat in fc.get("features", []):
-            props = feat.get("properties", {})
-            geom = feat.get("geometry", {})
-            if geom.get("type") != "Polygon":
-                continue
-            coords = _geom_to_coords(geom)
-            if not coords:
-                continue
-            btype: str = props.get("building", "generic")
-            height: float = _building_height(props)
-            area = _polygon_area_m2(coords)
-            fac_path = catalog.get_facade(btype, area, tile_centre_lat, west + 0.5)
-            writer.add_facade(FacadeFeature(resource=fac_path, height=height, coords=coords))
-            has_buildings = True
+        from xplane_gen.buildings import building_exclusion_zones, buildings_to_facades
 
-    # ── exclusion zones ───────────────────────────────────────────────
+        facades = buildings_to_facades(buildings_geojson, catalog, tile_centre_lat, west + 0.5)
+        for f in facades:
+            writer.add_facade(f)
+        if facades:
+            for ex in building_exclusion_zones(tile_west, tile_south):
+                writer.add_exclusion(ex)
+
+    # ── forest exclusion zone ─────────────────────────────────────────
     if has_forests:
         writer.add_exclusion(ExclusionZone("for", west, south, east, north))
-    if has_buildings:
-        writer.add_exclusion(ExclusionZone("obj", west, south, east, north))
-        writer.add_exclusion(ExclusionZone("fac", west, south, east, north))
 
     if dry_run:
         text_path = output_dir / "overlay_preview.txt"
