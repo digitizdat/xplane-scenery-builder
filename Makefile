@@ -17,6 +17,7 @@ lint: ## Run ruff check
 
 lintfix: ## Run ruff with automated fixing and formatting
 	uv run ruff check --fix src tests
+	uv run ruff check --select I --fix src tests
 	uv run ruff format src tests
 
 format: ## Run ruff format
@@ -35,7 +36,7 @@ test: ## Run all tests
 test-unit: ## Run unit tests only (exclude integration)
 	uv run pytest -m "not integration"
 
-precommit: lint typecheck secscan test ## Run full pre-commit suite
+precommit: lintfix typecheck secscan test ## Run full pre-commit suite
 
 clean: ## Remove build artifacts
 	rm -rf dist build .mypy_cache .ruff_cache .pytest_cache \
