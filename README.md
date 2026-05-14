@@ -36,19 +36,20 @@ make install
 ```
 
 This installs all runtime and dev dependencies into a local `.venv` via `uv`.
+All commands are run via `uv run` so you never need to activate the virtualenv manually.
 
 ## Usage
 
 ### Generate a scenery tile
 
 ```bash
-xplane-gen generate --bbox LAT_MIN,LON_MIN,LAT_MAX,LON_MAX --output ./my_scenery
+uv run xplane-gen generate --bbox LAT_MIN,LON_MIN,LAT_MAX,LON_MAX --output ./my_scenery
 ```
 
 Example — Seattle area:
 
 ```bash
-xplane-gen generate --bbox 47.5,-122.5,48.5,-121.5 --output ./seattle_scenery
+uv run xplane-gen generate --bbox 47.5,-122.5,48.5,-121.5 --output ./seattle_scenery
 ```
 
 The pipeline runs five stages (`fetch_osm → fetch_rasters → classify →
@@ -77,8 +78,8 @@ After a run with LLM classification enabled, low-confidence items are written
 to `review_queue.json`. Review them interactively:
 
 ```bash
-xplane-gen review --queue ./my_scenery/review_queue.json \
-                  --output ./my_scenery/resolved_queue.json
+uv run xplane-gen review --queue ./my_scenery/review_queue.json \
+                         --output ./my_scenery/resolved_queue.json
 ```
 
 Press **Enter** to accept the suggestion, or type a replacement building type.
@@ -89,13 +90,13 @@ to apply your decisions without re-calling Bedrock.
 
 ```bash
 # Fetch OSM data only
-xplane-gen fetch-osm --bbox 47.5,-122.5,48.5,-121.5 --output ./data
+uv run xplane-gen fetch-osm --bbox 47.5,-122.5,48.5,-121.5 --output ./data
 
 # Classify land cover only
-xplane-gen classify-land --bbox 47.5,-122.5,48.5,-121.5 --output ./data
+uv run xplane-gen classify-land --bbox 47.5,-122.5,48.5,-121.5 --output ./data
 
 # Validate asset catalog against an X-Plane install
-xplane-gen catalog validate --xplane-path "/path/to/X-Plane 12"
+uv run xplane-gen catalog validate --xplane-path "/path/to/X-Plane 12"
 ```
 
 ## Development

@@ -13,8 +13,7 @@ from rich.console import Console
 console = Console()
 
 # Overpass query template — fetches ways+relations for buildings, landuse, highways
-_QUERY = """
-[out:json][timeout:60];
+_QUERY = """[out:json][timeout:60];
 (
   way["building"]({s},{w},{n},{e});
   relation["building"]({s},{w},{n},{e});

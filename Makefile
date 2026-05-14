@@ -11,6 +11,8 @@ help: ## Show this help message
 
 install: ## Install all dependencies via uv
 	uv sync --all-groups
+	@echo ""
+	@echo "Installation complete. Run commands with: uv run xplane-gen <command>"
 
 lint: ## Run ruff check
 	uv run ruff check src tests
