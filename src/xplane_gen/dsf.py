@@ -1,9 +1,10 @@
 """DSFTool CLI wrapper and DSF text-format writer."""
+
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 — subprocess used only to invoke DSFTool with a fixed arg list; no shell, no user input
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -91,15 +92,14 @@ class DsfWriter:
             tmp_path = tmp.name
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 — args are [dsftool_path, flag, tmp_file, out_file]; no shell, no user-controlled input
                 [str(tool), "--text2dsf", tmp_path, str(dsf_path)],
                 capture_output=True,
                 text=True,
             )
             if result.returncode != 0:
                 raise RuntimeError(
-                    f"DSFTool failed (exit {result.returncode}):\n"
-                    f"{result.stderr or result.stdout}"
+                    f"DSFTool failed (exit {result.returncode}):\n{result.stderr or result.stdout}"
                 )
         finally:
             os.unlink(tmp_path)
@@ -122,8 +122,7 @@ class DsfWriter:
 
         for ex in self.exclusions:
             lines.append(
-                f"PROPERTY sim/exclude_{ex.kind} "
-                f"{ex.west}/{ex.south}/{ex.east}/{ex.north}"
+                f"PROPERTY sim/exclude_{ex.kind} {ex.west}/{ex.south}/{ex.east}/{ex.north}"
             )
 
         lines.append("")

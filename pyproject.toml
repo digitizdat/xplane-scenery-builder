@@ -42,7 +42,7 @@ strict = true
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = ["xplane_gen.osm", "xplane_gen.landcover", "xplane_gen.pipeline", "xplane_gen.catalog", "xplane_gen.review"]
+module = ["overpy", "xplane_gen.osm", "xplane_gen.landcover", "xplane_gen.pipeline", "xplane_gen.catalog", "xplane_gen.review"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
