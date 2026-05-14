@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# uv / venv
+.venv/
+
+# Type checking / linting caches
+.mypy_cache/
+.ruff_cache/
+
+# Test caches
+.pytest_cache/
+
+# AWS credentials — never commit
+session-environment.sh
+
+# Kiro session files
+orig-context.txt
