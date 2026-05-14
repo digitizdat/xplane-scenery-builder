@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import math
 import os
 import shutil
 import subprocess  # nosec B404 — subprocess used only to invoke DSFTool with a fixed arg list; no shell, no user input
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from shapely.geometry import LinearRing
 
@@ -175,3 +177,154 @@ def _ensure_ccw(coords: list[Coord]) -> list[Coord]:
     if not ring.is_ccw:
         return list(reversed(coords))
     return coords
+
+
+# ------------------------------------------------------------------ #
+# High-level overlay builder                                           #
+# ------------------------------------------------------------------ #
+
+
+def build_overlay(
+    tile_west: int,
+    tile_south: int,
+    buildings_geojson: Path | None,
+    landcover_geojson: Path | None,
+    output_dir: Path,
+    dsftool: Path | None = None,
+    dry_run: bool = False,
+) -> Path:
+    """Build a DSF overlay from classified GeoJSON files.
+
+    Reads buildings and landcover GeoJSON, maps features through the asset
+    catalog, writes exclusion zones for all placed content, and compiles
+    to binary DSF via DSFTool.
+
+    Returns the path to the compiled .dsf (or the text file in dry_run mode).
+    """
+    from xplane_gen.catalog import AssetCatalog
+
+    catalog = AssetCatalog()
+    writer = DsfWriter(tile_west=tile_west, tile_south=tile_south)
+
+    # Tile bbox for exclusion zones
+    west, south = float(tile_west), float(tile_south)
+    east, north = west + 1.0, south + 1.0
+    tile_centre_lat = south + 0.5
+
+    has_buildings = False
+    has_forests = False
+
+    # ── landcover → forest features ──────────────────────────────────
+    if landcover_geojson and landcover_geojson.exists():
+        fc: dict[str, Any] = json.loads(landcover_geojson.read_text(encoding="utf-8"))
+        for feat in fc.get("features", []):
+            props = feat.get("properties", {})
+            label: str = props.get("label", "")
+            density: float = float(props.get("ndvi_density", 0.7))
+            geom = feat.get("geometry", {})
+            coords = _geom_to_coords(geom)
+            if not coords or not label:
+                continue
+            # Skip non-vegetated classes
+            if label in {"built_up", "bare", "snow_ice", "water"}:
+                continue
+            for_path = catalog.get_forest(label, tile_centre_lat, west + 0.5)
+            if not for_path:
+                continue
+            writer.add_forest(ForestFeature(resource=for_path, density=density, coords=coords))
+            has_forests = True
+
+    # ── buildings → facade features ──────────────────────────────────
+    if buildings_geojson and buildings_geojson.exists():
+        fc = json.loads(buildings_geojson.read_text(encoding="utf-8"))
+        for feat in fc.get("features", []):
+            props = feat.get("properties", {})
+            geom = feat.get("geometry", {})
+            if geom.get("type") != "Polygon":
+                continue
+            coords = _geom_to_coords(geom)
+            if not coords:
+                continue
+            btype: str = props.get("building", "generic")
+            height: float = _building_height(props)
+            area = _polygon_area_m2(coords)
+            fac_path = catalog.get_facade(btype, area, tile_centre_lat, west + 0.5)
+            writer.add_facade(FacadeFeature(resource=fac_path, height=height, coords=coords))
+            has_buildings = True
+
+    # ── exclusion zones ───────────────────────────────────────────────
+    if has_forests:
+        writer.add_exclusion(ExclusionZone("for", west, south, east, north))
+    if has_buildings:
+        writer.add_exclusion(ExclusionZone("obj", west, south, east, north))
+        writer.add_exclusion(ExclusionZone("fac", west, south, east, north))
+
+    if dry_run:
+        text_path = output_dir / "overlay_preview.txt"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        text_path.write_text(writer._render(), encoding="utf-8")
+        return text_path
+
+    return writer.compile(output_dir, dsftool=dsftool)
+
+
+def _geom_to_coords(geom: dict[str, Any]) -> list[Coord]:
+    """Extract outer ring coords from a GeoJSON Polygon or first polygon of MultiPolygon."""
+    gtype = geom.get("type")
+    if gtype == "Polygon":
+        rings = geom.get("coordinates", [])
+        if rings:
+            return [(float(c[0]), float(c[1])) for c in rings[0]]
+    elif gtype == "MultiPolygon":
+        polys = geom.get("coordinates", [])
+        if polys and polys[0]:
+            return [(float(c[0]), float(c[1])) for c in polys[0][0]]
+    return []
+
+
+def _building_height(props: dict[str, Any]) -> float:
+    """Extract building height from OSM tags with fallback heuristics."""
+    if h := props.get("height"):
+        try:
+            return float(str(h).replace("m", "").strip())
+        except ValueError:
+            pass
+    if lvl := props.get("building:levels"):
+        try:
+            return float(lvl) * 3.5
+        except ValueError:
+            pass
+    heuristics: dict[str, float] = {
+        "residential": 7.0,
+        "house": 7.0,
+        "apartments": 12.0,
+        "commercial": 15.0,
+        "office": 20.0,
+        "industrial": 10.0,
+        "warehouse": 8.0,
+        "religious": 12.0,
+        "church": 12.0,
+    }
+    btype = str(props.get("building", "generic"))
+    return heuristics.get(btype, 8.0)
+
+
+def _polygon_area_m2(coords: list[Coord]) -> float:
+    """Approximate polygon area in m² using the shoelace formula with degree→metre conversion."""
+    if len(coords) < 3:
+        return 0.0
+    # Average latitude for metre-per-degree conversion
+    avg_lat = sum(c[1] for c in coords) / len(coords)
+    m_per_deg_lat = 111_320.0
+    m_per_deg_lon = 111_320.0 * math.cos(math.radians(avg_lat))
+
+    # Shoelace in projected coordinates
+    area = 0.0
+    n = len(coords)
+    for i in range(n):
+        x1 = coords[i][0] * m_per_deg_lon
+        y1 = coords[i][1] * m_per_deg_lat
+        x2 = coords[(i + 1) % n][0] * m_per_deg_lon
+        y2 = coords[(i + 1) % n][1] * m_per_deg_lat
+        area += x1 * y2 - x2 * y1
+    return abs(area) / 2.0

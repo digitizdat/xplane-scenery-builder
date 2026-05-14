@@ -1,5 +1,6 @@
-"""Task 1: DSFTool spike tests."""
+"""Task 1 & 5: DsfWriter and build_overlay tests."""
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,8 +11,12 @@ from xplane_gen.dsf import (
     DsfWriter,
     ExclusionZone,
     ForestFeature,
+    _building_height,
     _dsf_path,
     _ensure_ccw,
+    _geom_to_coords,
+    _polygon_area_m2,
+    build_overlay,
 )
 
 
@@ -113,3 +118,152 @@ def test_output_folder_structure(tmp_path: Path) -> None:
     assert dsf_path.parent.name == "+47-123"
     assert dsf_path.parent.parent.name == "Earth nav data"
     assert dsf_path.stat().st_size > 0
+
+
+SQUARE_GEOJSON = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-122.6, 47.6],
+                        [-122.5, 47.6],
+                        [-122.5, 47.7],
+                        [-122.6, 47.7],
+                        [-122.6, 47.6],
+                    ]
+                ],
+            },
+            "properties": {"building": "residential", "building:levels": "2"},
+        }
+    ],
+}
+
+FOREST_GEOJSON = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-122.6, 47.6],
+                        [-122.5, 47.6],
+                        [-122.5, 47.7],
+                        [-122.6, 47.7],
+                        [-122.6, 47.6],
+                    ]
+                ],
+            },
+            "properties": {"label": "tree_cover", "ndvi_density": 0.8},
+        }
+    ],
+}
+
+
+def test_build_overlay_dry_run_produces_text(tmp_path: Path) -> None:
+    buildings = tmp_path / "buildings.geojson"
+    landcover = tmp_path / "landcover.geojson"
+    buildings.write_text(json.dumps(SQUARE_GEOJSON), encoding="utf-8")
+    landcover.write_text(json.dumps(FOREST_GEOJSON), encoding="utf-8")
+
+    result = build_overlay(-123, 47, buildings, landcover, tmp_path, dry_run=True)
+
+    assert result.suffix == ".txt"
+    text = result.read_text()
+    assert "sim/overlay 1" in text
+    assert "sim/exclude_obj" in text
+    assert "sim/exclude_for" in text
+
+
+def test_build_overlay_facade_exclusion_zones(tmp_path: Path) -> None:
+    buildings = tmp_path / "buildings.geojson"
+    buildings.write_text(json.dumps(SQUARE_GEOJSON), encoding="utf-8")
+
+    result = build_overlay(-123, 47, buildings, None, tmp_path, dry_run=True)
+    text = result.read_text()
+
+    assert "sim/exclude_obj" in text
+    assert "sim/exclude_fac" in text
+    assert "sim/exclude_for" not in text
+
+
+def test_build_overlay_forest_only(tmp_path: Path) -> None:
+    landcover = tmp_path / "landcover.geojson"
+    landcover.write_text(json.dumps(FOREST_GEOJSON), encoding="utf-8")
+
+    result = build_overlay(-123, 47, None, landcover, tmp_path, dry_run=True)
+    text = result.read_text()
+
+    assert "sim/exclude_for" in text
+    assert "sim/exclude_obj" not in text
+
+
+def test_build_overlay_skips_non_vegetated(tmp_path: Path) -> None:
+    water_fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [-122.6, 47.6],
+                            [-122.5, 47.6],
+                            [-122.5, 47.7],
+                            [-122.6, 47.6],
+                        ]
+                    ],
+                },
+                "properties": {"label": "water"},
+            }
+        ],
+    }
+    landcover = tmp_path / "landcover.geojson"
+    landcover.write_text(json.dumps(water_fc), encoding="utf-8")
+
+    result = build_overlay(-123, 47, None, landcover, tmp_path, dry_run=True)
+    text = result.read_text()
+    assert "POLYGON_DEF" not in text
+
+
+def test_building_height_from_height_tag() -> None:
+    assert _building_height({"height": "12.5"}) == 12.5
+    assert _building_height({"height": "10m"}) == 10.0
+
+
+def test_building_height_from_levels() -> None:
+    assert _building_height({"building:levels": "3"}) == pytest.approx(10.5)
+
+
+def test_building_height_heuristic() -> None:
+    assert _building_height({"building": "residential"}) == 7.0
+    assert _building_height({"building": "unknown"}) == 8.0
+
+
+def test_polygon_area_m2_reasonable() -> None:
+    # ~0.1° × 0.1° square near Seattle ≈ 78 km² → ~78e6 m²... actually ~78 km²
+    # 0.1° lat ≈ 11,132 m; 0.1° lon at 47.6° ≈ 7,530 m → area ≈ 83.8e6 m²
+    coords = [(-122.6, 47.6), (-122.5, 47.6), (-122.5, 47.7), (-122.6, 47.7)]
+    area = _polygon_area_m2(coords)
+    assert 70e6 < area < 100e6
+
+
+def test_geom_to_coords_polygon() -> None:
+    geom = {"type": "Polygon", "coordinates": [[[1.0, 2.0], [3.0, 4.0], [1.0, 2.0]]]}
+    coords = _geom_to_coords(geom)
+    assert coords == [(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]
+
+
+def test_geom_to_coords_multipolygon() -> None:
+    geom = {
+        "type": "MultiPolygon",
+        "coordinates": [[[[1.0, 2.0], [3.0, 4.0], [1.0, 2.0]]]],
+    }
+    coords = _geom_to_coords(geom)
+    assert coords[0] == (1.0, 2.0)
