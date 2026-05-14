@@ -46,6 +46,7 @@ module = [
     "overpy",
     "rasterio",
     "rasterio.features",
+    "rasterio.io",
     "rasterio.mask",
     "rasterio.transform",
     "rasterio.crs",
