@@ -30,8 +30,11 @@ out skel qt;
 _OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
+
+_USER_AGENT = "xplane-scenery-builder/0.1 (https://github.com/digitizdat/xplane-scenery-builder)"
 
 _RETRY_DELAYS = [5, 15, 30]  # seconds between retries on a single endpoint
 
@@ -72,7 +75,10 @@ def fetch_tile(
 def _query_overpass(
     lat_min: float, lon_min: float, lat_max: float, lon_max: float
 ) -> overpy.Result:
+    import urllib.request
+
     query = _QUERY.format(s=lat_min, w=lon_min, n=lat_max, e=lon_max)
+    payload = query.encode("utf-8")
 
     last_exc: Exception = RuntimeError("No Overpass endpoints available")
     for endpoint in _OVERPASS_ENDPOINTS:
@@ -85,15 +91,24 @@ def _query_overpass(
                 )
                 time.sleep(delay)
             try:
-                return api.query(query)
+                req = urllib.request.Request(
+                    endpoint,
+                    data=payload,
+                    headers={"User-Agent": _USER_AGENT},
+                )
+                with urllib.request.urlopen(req, timeout=90) as resp:
+                    body = resp.read()
+                return api.parse_json(body)
             except overpy.exception.OverpassTooManyRequests as exc:
-                # Genuine rate limit — retry with backoff on same endpoint
                 last_exc = exc
                 console.print(f"[yellow]Rate limited: {exc}[/yellow]")
             except overpy.exception.OverPyException as exc:
-                # Any other error (including 406) — skip to next endpoint immediately
                 last_exc = exc
                 console.print(f"[yellow]Endpoint {endpoint} failed ({exc}), trying next…[/yellow]")
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                console.print(f"[yellow]Endpoint {endpoint} error ({exc}), trying next…[/yellow]")
                 break
 
     raise RuntimeError(f"All Overpass endpoints failed. Last error: {last_exc}")

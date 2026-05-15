@@ -10,8 +10,11 @@ from typing import Any
 
 import boto3
 import numpy as np
+from rich.console import Console
 
 from xplane_gen.catalog import AssetCatalog
+
+console = Console()
 
 # Model IDs
 _HAIKU = "anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -106,6 +109,9 @@ class BedrockClassifier:
     # ------------------------------------------------------------------ #
 
     def _call_model(self, model_id: str, image_b64: str, prompt: str) -> dict[str, Any]:
+        image_bytes = base64.b64decode(image_b64)
+        request_kb = (len(image_bytes) + len(prompt.encode())) / 1024
+
         response = self._client.converse(
             modelId=model_id,
             messages=[
@@ -115,7 +121,7 @@ class BedrockClassifier:
                         {
                             "image": {
                                 "format": "png",
-                                "source": {"bytes": base64.b64decode(image_b64)},
+                                "source": {"bytes": image_bytes},
                             }
                         },
                         {"text": prompt},
@@ -124,6 +130,16 @@ class BedrockClassifier:
             ],
             toolConfig={"tools": [{"toolSpec": _TOOL_SPEC}]},
         )
+
+        usage = response.get("usage", {})
+        input_tokens = usage.get("inputTokens", "?")
+        output_tokens = usage.get("outputTokens", "?")
+        console.print(
+            f"[dim]  LLM {model_id.split('.')[-1]} | "
+            f"request {request_kb:.1f} KB | "
+            f"tokens in={input_tokens} out={output_tokens}[/dim]"
+        )
+
         return _parse_tool_response(response)
 
     def _queue_for_review(

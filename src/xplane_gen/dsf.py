@@ -254,7 +254,17 @@ def build_overlay(
         text_path.write_text(writer._render(), encoding="utf-8")
         return text_path
 
-    return writer.compile(output_dir, dsftool=dsftool)
+    # Fall back to dry-run if DSFTool is not installed
+    try:
+        return writer.compile(output_dir, dsftool=dsftool)
+    except FileNotFoundError as exc:
+        from rich.console import Console as _Console
+        _Console().print(
+            f"[yellow]Warning: {exc}\nWriting text preview instead (--dry-run mode).[/yellow]"
+        )
+        text_path = output_dir / "overlay_preview.txt"
+        text_path.write_text(writer._render(), encoding="utf-8")
+        return text_path
 
 
 def _geom_to_coords(geom: dict[str, Any]) -> list[Coord]:

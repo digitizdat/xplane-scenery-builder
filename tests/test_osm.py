@@ -108,16 +108,21 @@ def test_retry_on_overpass_error(tmp_path: Path) -> None:
     good_result = _make_result([_make_way({"building": "yes"}, SQUARE)])
     call_count = 0
 
-    def flaky_query(query: str) -> MagicMock:
+    def flaky_urlopen(req: object, timeout: int = 60) -> MagicMock:  # noqa: ARG001
         nonlocal call_count
         call_count += 1
         if call_count < 2:
             raise overpy.exception.OverpassTooManyRequests()
-        return good_result
+        resp = MagicMock()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        resp.read.return_value = b'{"version":0.6,"elements":[]}'
+        return resp
 
     with (
         patch("xplane_gen.osm.time.sleep"),
-        patch("overpy.Overpass.query", side_effect=flaky_query),
+        patch("urllib.request.urlopen", side_effect=flaky_urlopen),
+        patch("overpy.Overpass.parse_json", return_value=good_result),
     ):
         paths = fetch_tile(47.5, -122.5, 47.6, -122.4, str(tmp_path))
 
