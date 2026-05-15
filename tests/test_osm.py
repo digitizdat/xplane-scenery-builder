@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import overpy
 import pytest
 
 from xplane_gen.osm import _is_building, _is_landuse, _is_road, fetch_tile
@@ -104,8 +105,6 @@ def test_predicates() -> None:
 
 
 def test_retry_on_overpass_error(tmp_path: Path) -> None:
-    import overpy
-
     good_result = _make_result([_make_way({"building": "yes"}, SQUARE)])
     call_count = 0
 
@@ -113,7 +112,7 @@ def test_retry_on_overpass_error(tmp_path: Path) -> None:
         nonlocal call_count
         call_count += 1
         if call_count < 2:
-            raise overpy.exception.OverPyException()
+            raise overpy.exception.OverpassTooManyRequests()
         return good_result
 
     with (

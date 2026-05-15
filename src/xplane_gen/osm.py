@@ -86,13 +86,14 @@ def _query_overpass(
                 time.sleep(delay)
             try:
                 return api.query(query)
-            except overpy.exception.OverPyException as exc:
+            except overpy.exception.OverpassTooManyRequests as exc:
+                # Genuine rate limit — retry with backoff on same endpoint
                 last_exc = exc
-                if attempt < len(_RETRY_DELAYS):
-                    console.print(f"[yellow]Overpass error: {exc}[/yellow]")
-                    continue
-                # All retries exhausted on this endpoint — try next
-                console.print(f"[yellow]Endpoint {endpoint} failed, trying next…[/yellow]")
+                console.print(f"[yellow]Rate limited: {exc}[/yellow]")
+            except overpy.exception.OverPyException as exc:
+                # Any other error (including 406) — skip to next endpoint immediately
+                last_exc = exc
+                console.print(f"[yellow]Endpoint {endpoint} failed ({exc}), trying next…[/yellow]")
                 break
 
     raise RuntimeError(f"All Overpass endpoints failed. Last error: {last_exc}")
