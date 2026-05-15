@@ -1,0 +1,253 @@
+<mxfile host="Electron">
+  <diagram name="xplane-scenery-builder" id="architecture">
+    <mxGraphModel dx="755" dy="530" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" value="X-Plane GenAI Scenery Builder — End-to-End Architecture" vertex="1">
+          <mxGeometry height="40" width="1100" x="400" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_user" parent="1" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontStyle=1;fontSize=12;" value="User" vertex="1">
+          <mxGeometry height="1000" width="160" x="40" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="user_cli" parent="zone_user" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="xplane-gen generate&#xa;--bbox LAT,LON,LAT,LON&#xa;--output ./scenery" vertex="1">
+          <mxGeometry height="60" width="140" x="10" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="user_review" parent="zone_user" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="xplane-gen review&#xa;(HITL queue)" vertex="1">
+          <mxGeometry height="50" width="140" x="10" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="user_xplane" parent="zone_user" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="X-Plane 11/12&#xa;Custom Scenery/" vertex="1">
+          <mxGeometry height="50" width="140" x="10" y="900" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_pipeline" parent="1" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;fontStyle=1;fontSize=12;" value="Pipeline (TileProcessor)" vertex="1">
+          <mxGeometry height="1000" width="220" x="240" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="stage1" parent="zone_pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="① fetch_osm" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="stage2" parent="zone_pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="② fetch_rasters" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="stage3" parent="zone_pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="③ classify" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="stage4" parent="zone_pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="④ write_dsf" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="stage5" parent="zone_pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="⑤ validate" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="state_file" parent="zone_pipeline" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="tile_state.json&#xa;(resume on failure)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="review_queue" parent="zone_pipeline" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="review_queue.json&#xa;(low-confidence items)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="dsf_output" parent="zone_pipeline" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" value="DSF Overlay&#xa;Earth nav data/+LL-LLL/*.dsf" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s1s2" edge="1" parent="zone_pipeline" source="stage1" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;" target="stage2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s2s3" edge="1" parent="zone_pipeline" source="stage2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;" target="stage3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s3s4" edge="1" parent="zone_pipeline" source="stage3" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;" target="stage4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s4s5" edge="1" parent="zone_pipeline" source="stage4" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#666666;" target="stage5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_s5dsf" edge="1" parent="zone_pipeline" source="stage5" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;" target="dsf_output">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="110" y="430" />
+              <mxPoint x="10" y="430" />
+              <mxPoint x="10" y="800" />
+              <mxPoint x="110" y="800" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="zone_data" parent="1" style="swimlane;startSize=30;fillColor=#e6f4ea;strokeColor=#82b366;strokeWidth=2;fontStyle=1;fontSize=12;" value="Free Geospatial Data Sources" vertex="1">
+          <mxGeometry height="500" width="220" x="510" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="osm" parent="zone_data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#82b366;fontSize=10;" value="OpenStreetMap&#xa;Overpass API&#xa;(buildings, roads, landuse)" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="esa" parent="zone_data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#82b366;fontSize=10;" value="ESA WorldCover 2021&#xa;s3://esa-worldcover/&#xa;(10m land classification)" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="sentinel" parent="zone_data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#82b366;fontSize=10;" value="Sentinel-2 L2A&#xa;s3://sentinel-cogs/&#xa;(NDVI / forest density)" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="ms_buildings" parent="zone_data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f4ea;strokeColor=#82b366;fontSize=10;" value="Microsoft GlobalML&#xa;BuildingFootprints&#xa;(height fallback)" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_aws" parent="1" style="swimlane;startSize=30;fillColor=#fff3e0;strokeColor=#e6821e;strokeWidth=2;fontStyle=1;fontSize=12;" value="AWS / Amazon Bedrock" vertex="1">
+          <mxGeometry height="460" width="220" x="510" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="haiku" parent="zone_aws" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e6821e;fontSize=10;" value="Claude Haiku 4.5&#xa;(bulk triage)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="sonnet" parent="zone_aws" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e6821e;fontSize=10;" value="Claude Sonnet 4.6&#xa;(mid-confidence escalation)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="opus" parent="zone_aws" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e6821e;fontSize=10;" value="Claude Opus 4.7&#xa;(low-confidence / orchestration)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="nova_embed" parent="zone_aws" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e6821e;fontSize=10;" value="Nova Multimodal Embeddings&#xa;(asset catalog search)" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="llm_cache" parent="zone_aws" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value=".llm_cache/&#xa;sha256(image+prompt)" vertex="1">
+          <mxGeometry height="40" width="180" x="20" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_assets" parent="1" style="swimlane;startSize=30;fillColor=#f3e5f5;strokeColor=#7B1FA2;strokeWidth=2;fontStyle=1;fontSize=12;" value="X-Plane Asset Library" vertex="1">
+          <mxGeometry height="500" width="220" x="780" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="catalog_yaml" parent="zone_assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#7B1FA2;fontSize=10;" value="assets/catalog.yaml&#xa;building_type × size → .fac&#xa;esa_class × climate → .for" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="fac_files" parent="zone_assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#7B1FA2;fontSize=10;" value="Facades (.fac)&#xa;lib/g8/residential_md.fac&#xa;lib/g8/commercial_lg.fac …" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="for_files" parent="zone_assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#7B1FA2;fontSize=10;" value="Forests (.for)&#xa;lib/g8/trees_decid_cld_wet.for&#xa;lib/g8/trees_tropical.for …" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="dsftool" parent="zone_assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#7B1FA2;fontSize=10;" value="DSFTool (xptools)&#xa;--text2dsf → binary DSF" vertex="1">
+          <mxGeometry height="50" width="180" x="20" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="zone_google" parent="1" style="swimlane;startSize=30;fillColor=#fce4ec;strokeColor=#c62828;strokeWidth=2;fontStyle=1;fontSize=12;dashed=1;" value="Google Cloud (Phase 2 optional)" vertex="1">
+          <mxGeometry height="200" width="220" x="780" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="earth_ai" parent="zone_google" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#c62828;fontSize=10;" value="Google Earth AI&#xa;Remote Sensing Foundations&#xa;(bulk tile classification)" vertex="1">
+          <mxGeometry height="60" width="180" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="earth_ai_note" parent="zone_google" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontStyle=2;" value="Experimental — sign up at&#xa;GCP Model Garden" vertex="1">
+          <mxGeometry height="30" width="180" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_pipe" edge="1" parent="1" source="user_cli" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2;" target="stage1" value="bbox + options">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_osm_s1" edge="1" parent="1" source="osm" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43A047;strokeWidth=2;" target="stage1" value="buildings.geojson&#xa;landuse.geojson&#xa;roads.geojson">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_esa_s2" edge="1" parent="1" source="esa" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43A047;strokeWidth=2;" target="stage2" value="landcover.geojson">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sent_s3" edge="1" parent="1" source="sentinel" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43A047;strokeWidth=2;" target="stage3" value="ndvi_density">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="390" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ms_s4" edge="1" parent="1" source="ms_buildings" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43A047;strokeWidth=2;dashed=1;" target="stage4" value="height fallback">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="490" />
+              <mxPoint x="450" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_haiku_s3" edge="1" parent="1" source="haiku" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e6821e;strokeWidth=2;" target="stage3" value="building_type&#xa;confidence">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="695" />
+              <mxPoint x="470" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cat_s4" edge="1" parent="1" source="catalog_yaml" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#7B1FA2;strokeWidth=2;" target="stage4" value=".fac / .for paths">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="160" />
+              <mxPoint x="760" y="320" />
+              <mxPoint x="490" y="320" />
+              <mxPoint x="490" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dsftool_s4" edge="1" parent="1" source="dsftool" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#7B1FA2;strokeWidth=2;" target="stage4" value="compile">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="505" />
+              <mxPoint x="760" y="430" />
+              <mxPoint x="470" y="430" />
+              <mxPoint x="470" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_queue_user" edge="1" parent="1" source="review_queue" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F57C00;strokeWidth=2;dashed=1;" target="user_review" value="low-confidence&#xa;items">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_review_s3" edge="1" parent="1" source="user_review" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F57C00;strokeWidth=2;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="stage3" value="resolved_queue.json">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="220" y="710" />
+              <mxPoint x="220" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dsf_xplane" edge="1" parent="1" source="dsf_output" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2;" target="user_xplane" value="cp -r ./scenery&#xa;Custom Scenery/">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_geo_s3" edge="1" parent="1" source="earth_ai" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#c62828;strokeWidth=2;dashed=1;" target="stage3" value="bulk tile&#xa;classification">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="700" />
+              <mxPoint x="760" y="600" />
+              <mxPoint x="480" y="600" />
+              <mxPoint x="480" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" parent="1" style="swimlane;startSize=25;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;fontStyle=1;" value="Legend" vertex="1">
+          <mxGeometry height="260" width="260" x="1060" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" edge="1" parent="legend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;strokeWidth=2;endArrow=block;" value="">
+          <mxGeometry height="20" width="80" x="20" y="50" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l1t" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="User / pipeline flow" vertex="1">
+          <mxGeometry height="30" width="140" x="110" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" edge="1" parent="legend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#43A047;strokeWidth=2;endArrow=block;" value="">
+          <mxGeometry height="20" width="80" x="20" y="90" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l2t" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="Geospatial data ingest" vertex="1">
+          <mxGeometry height="30" width="140" x="110" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" edge="1" parent="legend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#e6821e;strokeWidth=2;endArrow=block;" value="">
+          <mxGeometry height="20" width="80" x="20" y="130" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l3t" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="Bedrock LLM classification" vertex="1">
+          <mxGeometry height="30" width="140" x="110" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="l4" edge="1" parent="legend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#7B1FA2;strokeWidth=2;endArrow=block;" value="">
+          <mxGeometry height="20" width="80" x="20" y="170" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l4t" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="Asset catalog / DSFTool" vertex="1">
+          <mxGeometry height="30" width="140" x="110" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="l5" edge="1" parent="legend" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#F57C00;strokeWidth=2;dashed=1;endArrow=block;" value="">
+          <mxGeometry height="20" width="80" x="20" y="210" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l5t" parent="legend" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="HITL review loop" vertex="1">
+          <mxGeometry height="30" width="140" x="110" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="routing_note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff9cc;strokeColor=#d6b656;fontSize=10;align=left;" value="Bedrock Routing:&#xa;≥0.85 → Haiku (auto-approve)&#xa;0.60–0.85 → Sonnet&#xa;&lt;0.60 → Opus or review queue" vertex="1">
+          <mxGeometry height="80" width="260" x="1060" y="380" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
