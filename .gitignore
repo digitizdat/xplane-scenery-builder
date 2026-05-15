@@ -20,3 +20,4 @@ session-environment.sh
 
 # Kiro session files
 orig-context.txt
+.kiro/
