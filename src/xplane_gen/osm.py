@@ -27,7 +27,13 @@ out body;
 out skel qt;
 """
 
-_RETRY_DELAYS = [5, 15, 30]  # seconds between retries
+_OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+
+_RETRY_DELAYS = [5, 15, 30]  # seconds between retries on a single endpoint
 
 
 def fetch_tile(
@@ -66,23 +72,30 @@ def fetch_tile(
 def _query_overpass(
     lat_min: float, lon_min: float, lat_max: float, lon_max: float
 ) -> overpy.Result:
-    api = overpy.Overpass()
     query = _QUERY.format(s=lat_min, w=lon_min, n=lat_max, e=lon_max)
 
-    for attempt, delay in enumerate([0] + _RETRY_DELAYS):
-        if delay:
-            console.print(
-                f"[yellow]Rate limited, retrying in {delay}s (attempt {attempt + 1})…[/yellow]"
-            )
-            time.sleep(delay)
-        try:
-            return api.query(query)
-        except overpy.exception.OverPyException as exc:
-            if attempt == len(_RETRY_DELAYS):
-                raise
-            console.print(f"[yellow]Overpass error: {exc}[/yellow]")
+    last_exc: Exception = RuntimeError("No Overpass endpoints available")
+    for endpoint in _OVERPASS_ENDPOINTS:
+        api = overpy.Overpass(url=endpoint)
+        for attempt, delay in enumerate([0] + _RETRY_DELAYS):
+            if delay:
+                console.print(
+                    f"[yellow]Rate limited on {endpoint}, retrying in {delay}s "
+                    f"(attempt {attempt + 1})…[/yellow]"
+                )
+                time.sleep(delay)
+            try:
+                return api.query(query)
+            except overpy.exception.OverPyException as exc:
+                last_exc = exc
+                if attempt < len(_RETRY_DELAYS):
+                    console.print(f"[yellow]Overpass error: {exc}[/yellow]")
+                    continue
+                # All retries exhausted on this endpoint — try next
+                console.print(f"[yellow]Endpoint {endpoint} failed, trying next…[/yellow]")
+                break
 
-    raise RuntimeError("Overpass query failed after all retries")  # unreachable
+    raise RuntimeError(f"All Overpass endpoints failed. Last error: {last_exc}")
 
 
 # ------------------------------------------------------------------ #
