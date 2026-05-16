@@ -233,9 +233,14 @@ class TileProcessor:
                     # For linestrings, use midpoint bbox
                     coords = geom.get("coordinates", [])
                     road_patch = dummy
-                    if coords:
-                        lons = [c[0] for c in coords]
-                        lats = [c[1] for c in coords]
+                    if coords and isinstance(coords[0], (int, float)):
+                        # Point — skip
+                        pass
+                    elif coords and isinstance(coords[0], list):
+                        # Flatten nested coords (LineString or MultiLineString)
+                        flat = coords if isinstance(coords[0][0], (int, float)) else coords[0]
+                        lons = [c[0] for c in flat]
+                        lats = [c[1] for c in flat]
                         bbox = (min(lons), min(lats), max(lons), max(lats))
                         cropped = crop_patch(self.output_dir, bbox, tile_bbox)
                         if cropped is not None:
