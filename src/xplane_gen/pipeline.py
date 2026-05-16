@@ -335,7 +335,7 @@ class TileProcessor:
     # State persistence                                                    #
     # ------------------------------------------------------------------ #
 
-    _FETCH_STAGES = {"fetch_osm", "fetch_rasters", "fetch_ortho"}
+    _FETCH_STAGES = {"fetch_osm", "fetch_rasters", "fetch_ortho", "annotate"}
 
     def _reset_to_cached_data(self) -> None:
         """Keep only fetch stages as completed, forcing regeneration from cached data."""
