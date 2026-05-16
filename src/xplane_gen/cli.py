@@ -86,6 +86,7 @@ def classify_land(bbox: str, output: str) -> None:
     help="Satellite imagery source for orthophoto ground texture. Omit to skip.",
 )
 @click.option("--regen", is_flag=True, help="Regenerate from cached data without re-downloading.")
+@click.option("--review-all", is_flag=True, help="Force human review of all LLM classifications.")
 def generate(
     bbox: str,
     output: str,
@@ -94,6 +95,7 @@ def generate(
     dsftool: str | None,
     ortho_source: str | None,
     regen: bool,
+    review_all: bool,
 ) -> None:
     """Task 8: End-to-end tile generation pipeline."""
     from pathlib import Path
@@ -112,6 +114,7 @@ def generate(
         dsftool=Path(dsftool) if dsftool else None,
         ortho_source=ortho_source,
         regen=regen,
+        review_all=review_all,
     )
     proc.run()
 

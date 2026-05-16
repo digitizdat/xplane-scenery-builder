@@ -14,7 +14,16 @@ from shapely.validation import make_valid
 
 console = Console()
 
-STAGES = ["fetch_osm", "fetch_rasters", "classify", "fetch_ortho", "write_dsf", "validate", "done"]
+STAGES = [
+    "fetch_osm",
+    "fetch_rasters",
+    "classify",
+    "fetch_ortho",
+    "review",
+    "write_dsf",
+    "validate",
+    "done",
+]
 
 
 class TileProcessor:
@@ -30,6 +39,7 @@ class TileProcessor:
         dsftool: Path | None = None,
         ortho_source: str | None = None,
         regen: bool = False,
+        review_all: bool = False,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -40,6 +50,7 @@ class TileProcessor:
         self.auto = auto
         self.dsftool = dsftool
         self.ortho_source = ortho_source
+        self.review_all = review_all
 
         # Tile SW corner (integer degrees)
         self.tile_west = int(math.floor(lon_min))
@@ -127,6 +138,20 @@ class TileProcessor:
             str(self.output_dir),
             make_source(self.ortho_source),
         )
+
+    def _stage_review(self) -> None:
+        """Launch inline interactive review if --review-all or a review queue exists."""
+        queue_path = self.output_dir / "review_queue.json"
+        if not queue_path.exists():
+            return
+        if self.auto:
+            console.print("[dim]  --auto: skipping human review[/dim]")
+            return
+
+        from xplane_gen.review import run_review
+
+        resolved_path = self.output_dir / "resolved_queue.json"
+        run_review(str(queue_path), str(resolved_path))
 
     def _stage_write_dsf(self) -> None:
         from xplane_gen.dsf import build_overlay

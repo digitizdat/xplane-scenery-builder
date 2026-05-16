@@ -51,6 +51,7 @@ class BedrockClassifier:
         self,
         output_dir: Path,
         region: str = "us-east-1",
+        review_all: bool = False,
     ) -> None:
         self.output_dir = output_dir
         self._client = boto3.client("bedrock-runtime", region_name=region)
@@ -58,6 +59,7 @@ class BedrockClassifier:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._catalog = AssetCatalog()
         self._review_queue: list[dict[str, Any]] = []
+        self._review_all = review_all
 
     def classify_building(
         self,
@@ -93,7 +95,7 @@ class BedrockClassifier:
 
         self._save_cache(cache_key, result)
 
-        if result["confidence"] < _REVIEW_THRESHOLD:
+        if self._review_all or result["confidence"] < _REVIEW_THRESHOLD:
             self._queue_for_review(result, image_b64, osm_tags)
 
         return result
