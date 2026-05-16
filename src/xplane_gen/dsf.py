@@ -166,7 +166,10 @@ class DsfWriter:
 
 
 def _dsf_path(output_dir: Path, lat: int, lon: int) -> Path:
-    folder = f"{lat:+03d}{lon:+04d}"
+    # X-Plane groups DSF tiles in 10°×10° parent folders (SW corner rounded to nearest 10°)
+    parent_lat = (lat // 10) * 10
+    parent_lon = (lon // 10) * 10
+    folder = f"{parent_lat:+03d}{parent_lon:+04d}"
     filename = f"{lat:+03d}{lon:+04d}.dsf"
     return output_dir / "Earth nav data" / folder / filename
 
@@ -259,6 +262,7 @@ def build_overlay(
         return writer.compile(output_dir, dsftool=dsftool)
     except FileNotFoundError as exc:
         from rich.console import Console as _Console
+
         _Console().print(
             f"[yellow]Warning: {exc}\nWriting text preview instead (--dry-run mode).[/yellow]"
         )

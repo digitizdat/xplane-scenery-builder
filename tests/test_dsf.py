@@ -35,7 +35,7 @@ def make_writer() -> DsfWriter:
 
 def test_dsf_path() -> None:
     p = _dsf_path(Path("/out"), 47, -123)
-    assert p == Path("/out/Earth nav data/+47-123/+47-123.dsf")
+    assert p == Path("/out/Earth nav data/+40-130/+47-123.dsf")
 
 
 def test_render_contains_required_properties() -> None:
@@ -69,7 +69,7 @@ def test_ensure_ccw_flips_cw() -> None:
 
 def test_compile_calls_dsftool(tmp_path: Path) -> None:
     writer = make_writer()
-    fake_dsf = tmp_path / "Earth nav data" / "+47-123" / "+47-123.dsf"
+    fake_dsf = tmp_path / "Earth nav data" / "+40-130" / "+47-123.dsf"
 
     def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
         fake_dsf.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +103,7 @@ def test_compile_raises_on_dsftool_failure(tmp_path: Path) -> None:
 
 def test_output_folder_structure(tmp_path: Path) -> None:
     writer = make_writer()
-    fake_dsf = tmp_path / "Earth nav data" / "+47-123" / "+47-123.dsf"
+    fake_dsf = tmp_path / "Earth nav data" / "+40-130" / "+47-123.dsf"
 
     def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
         fake_dsf.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +115,7 @@ def test_output_folder_structure(tmp_path: Path) -> None:
     with patch("xplane_gen.dsf.subprocess.run", side_effect=fake_run):
         dsf_path = writer.compile(tmp_path, dsftool=Path("/fake/DSFTool"))
 
-    assert dsf_path.parent.name == "+47-123"
+    assert dsf_path.parent.name == "+40-130"
     assert dsf_path.parent.parent.name == "Earth nav data"
     assert dsf_path.stat().st_size > 0
 
