@@ -179,9 +179,10 @@ class TileProcessor:
             ]
             if ambiguous:
                 console.print(f"[cyan]Classifying {len(ambiguous)} buildings…[/cyan]")
-                for feat in ambiguous:
+                for i, feat in enumerate(ambiguous, 1):
                     props = feat.get("properties", {})
                     patch = _get_patch(feat.get("geometry", {}))
+                    console.print(f"[dim]  building {i}/{len(ambiguous)}[/dim]")
                     result = classifier.classify_building(
                         patch, {k: str(v) for k, v in props.items()}
                     )
@@ -201,10 +202,11 @@ class TileProcessor:
             ]
             if forests:
                 console.print(f"[cyan]Classifying {len(forests)} forest polygons…[/cyan]")
-                for feat in forests:
+                for i, feat in enumerate(forests, 1):
                     props = feat.get("properties", {})
                     patch = _get_patch(feat.get("geometry", {}))
                     ndvi = float(props.get("ndvi_density", 0.7))
+                    console.print(f"[dim]  forest {i}/{len(forests)}[/dim]")
                     result = classifier.classify_forest(
                         patch, props.get("label", "tree_cover"), ndvi
                     )
@@ -220,9 +222,10 @@ class TileProcessor:
             roads = fc.get("features", [])
             if roads:
                 console.print(f"[cyan]Classifying {len(roads)} road segments…[/cyan]")
-                for feat in roads:
+                for i, feat in enumerate(roads, 1):
                     props = feat.get("properties", {})
                     geom = feat.get("geometry", {})
+                    console.print(f"[dim]  road {i}/{len(roads)}[/dim]")
                     # For linestrings, use midpoint bbox
                     coords = geom.get("coordinates", [])
                     road_patch = dummy

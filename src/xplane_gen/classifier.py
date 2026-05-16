@@ -16,10 +16,10 @@ from rich.console import Console
 
 console = Console()
 
-# Model IDs — tiered routing
-_HAIKU = "anthropic.claude-haiku-4-5-20251001-v1:0"
-_SONNET = "anthropic.claude-sonnet-4-6"
-_OPUS = "anthropic.claude-opus-4-7"
+# Model IDs — cross-region inference profiles (required for on-demand access)
+_HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+_SONNET = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
+_OPUS = "us.anthropic.claude-opus-4-20250514-v1:0"
 
 # Confidence routing thresholds
 _HIGH = 0.85
@@ -263,10 +263,14 @@ class BedrockClassifier:
         )
 
         usage = response.get("usage", {})
+        # Extract short name: "us.anthropic.claude-haiku-4-5-..." → "haiku-4-5"
+        short = model_id.split("claude-")[-1].split("-2025")[0]
+        if "claude" not in model_id:
+            short = model_id
         console.print(
-            f"[dim]  {model_id.split('.')[-1]} | "
+            f"[dim]    {short} | "
             f"{request_kb:.0f} KB | "
-            f"in={usage.get('inputTokens', '?')} out={usage.get('outputTokens', '?')}[/dim]"
+            f"tokens in={usage.get('inputTokens', '?')} out={usage.get('outputTokens', '?')}[/dim]"
         )
 
         return _parse_tool_response(response, tool_name, fallback)
