@@ -29,6 +29,7 @@ class TileProcessor:
         auto: bool = False,
         dsftool: Path | None = None,
         ortho_source: str | None = None,
+        regen: bool = False,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -46,6 +47,9 @@ class TileProcessor:
 
         self.state_file = output_dir / "tile_state.json"
         self._state: dict[str, Any] = self._load_state()
+
+        if regen:
+            self._reset_to_cached_data()
 
     # ------------------------------------------------------------------ #
     # Public                                                               #
@@ -169,6 +173,16 @@ class TileProcessor:
     # ------------------------------------------------------------------ #
     # State persistence                                                    #
     # ------------------------------------------------------------------ #
+
+    _FETCH_STAGES = {"fetch_osm", "fetch_rasters", "fetch_ortho"}
+
+    def _reset_to_cached_data(self) -> None:
+        """Keep only fetch stages as completed, forcing regeneration from cached data."""
+        completed = self._state.get("completed", [])
+        self._state["completed"] = [s for s in completed if s in self._FETCH_STAGES]
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.state_file.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
+        console.print("[cyan]Regenerating from cached data…[/cyan]")
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():
