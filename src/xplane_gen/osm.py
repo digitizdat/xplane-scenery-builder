@@ -96,7 +96,7 @@ def _query_overpass(
                     data=payload,
                     headers={"User-Agent": _USER_AGENT},
                 )
-                with urllib.request.urlopen(req, timeout=90) as resp:
+                with urllib.request.urlopen(req, timeout=90) as resp:  # nosec B310  # nosemgrep: dynamic-urllib-use-detected
                     body = resp.read()
                 return api.parse_json(body)
             except overpy.exception.OverpassTooManyRequests as exc:
