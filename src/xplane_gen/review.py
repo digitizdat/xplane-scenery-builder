@@ -14,9 +14,19 @@ from rich.table import Table
 console = Console()
 
 _VALID_TYPES = {
-    "residential", "commercial", "industrial", "religious", "agricultural", "generic",
-    "deciduous", "conifer", "mixed",
-    "asphalt", "gravel", "dirt", "concrete",
+    "residential",
+    "commercial",
+    "industrial",
+    "religious",
+    "agricultural",
+    "generic",
+    "deciduous",
+    "conifer",
+    "mixed",
+    "asphalt",
+    "gravel",
+    "dirt",
+    "concrete",
 }
 
 
@@ -64,25 +74,26 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         # Find similar items (same classification guess) ahead in queue
         similar_indices = [
-            j for j in range(i + 1, len(items))
-            if (items[j].get("result", items[j]).get("building_type")
+            j
+            for j in range(i + 1, len(items))
+            if (
+                items[j].get("result", items[j]).get("building_type")
                 or items[j].get("result", items[j]).get("species_mix")
-                or items[j].get("result", items[j]).get("surface_type")) == guess
+                or items[j].get("result", items[j]).get("surface_type")
+            )
+            == guess
         ]
 
         _show_item(item, i + 1, len(items))
 
         if similar_indices:
-            console.print(
-                f"[dim]{len(similar_indices)} similar item(s) also classified as "
-                f"[bold]{guess}[/bold]. Apply decision to all? (y/n)[/dim]"
-            )
-            batch_answer = _prompt(f"  [{guess}] apply to all? (y/n): ").strip().lower()
-            apply_to_all = batch_answer in {"y", "yes", ""}
+            decision = _prompt(
+                f"  [{guess}] for all {len(similar_indices) + 1} similar? "
+                f"(Enter=accept, or type replacement): "
+            ).strip()
         else:
-            apply_to_all = False
+            decision = _prompt(f"  [{guess}] (Enter=accept, or type replacement): ").strip()
 
-        decision = _prompt(f"  classification [{guess}]: ").strip()
         if not decision:
             decision = guess
         decision = _validate_type(decision, guess)
@@ -91,12 +102,12 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         item["human_decision"] = decision
         resolved.append(item)
 
-        if apply_to_all:
+        if similar_indices and decision == guess:
+            # Auto-applied to similar items (user accepted default for batch)
             for j in similar_indices:
                 sibling = dict(items[j])
                 sibling["human_decision"] = decision
                 resolved.append(sibling)
-            # Skip the similar items we just batch-resolved
             processed = set(similar_indices)
             remaining = [items[k] for k in range(i + 1, len(items)) if k not in processed]
             items = items[: i + 1] + remaining

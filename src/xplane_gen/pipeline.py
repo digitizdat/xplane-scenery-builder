@@ -83,6 +83,13 @@ class TileProcessor:
                 if self._completed(stage):
                     console.print(f"[dim]  ✓ {stage} (cached)[/dim]")
                     continue
+                # Stop spinner for interactive review stage
+                if stage == "review":
+                    progress.stop()
+                    self._run_stage(stage)
+                    console.print(f"[green]  ✓ {stage}[/green]")
+                    progress.start()
+                    continue
                 task = progress.add_task(f"[cyan]{stage}[/cyan]…", total=None)
                 self._run_stage(stage)
                 progress.remove_task(task)

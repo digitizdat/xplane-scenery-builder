@@ -86,17 +86,18 @@ def test_run_review_all_items_in_resolved(tmp_path: Path) -> None:
 def test_batch_approval_applies_to_similar(tmp_path: Path) -> None:
     q = tmp_path / "queue.json"
     out = tmp_path / "resolved.json"
-    # Three items with same type — batch should apply to all
+    # Three items with same type — Enter accepts default for all similar
     items = [_make_item("generic"), _make_item("generic"), _make_item("generic")]
     _write_queue(q, items)
 
-    # First prompt: batch confirm (y), second: type decision (commercial)
-    responses = iter(["y", "commercial"])
+    # Single empty response (Enter) accepts "generic" and batch-applies to similar
+    responses = iter([""])
     with patch("xplane_gen.review._prompt", side_effect=lambda _: next(responses)):
         run_review(str(q), str(out))
 
     resolved = json.loads(out.read_text())
-    assert all(r["human_decision"] == "commercial" for r in resolved)
+    assert len(resolved) == 3
+    assert all(r["human_decision"] == "generic" for r in resolved)
 
 
 def test_resolved_queue_has_required_fields(tmp_path: Path) -> None:
