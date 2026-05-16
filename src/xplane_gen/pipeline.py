@@ -17,8 +17,9 @@ console = Console()
 STAGES = [
     "fetch_osm",
     "fetch_rasters",
-    "classify",
+    "annotate",
     "fetch_ortho",
+    "classify_buildings",
     "review",
     "write_dsf",
     "validate",
@@ -120,7 +121,7 @@ class TileProcessor:
             str(self.output_dir),
         )
 
-    def _stage_classify(self) -> None:
+    def _stage_annotate(self) -> None:
         from xplane_gen.ndvi import annotate_forest_density
 
         lc = self.output_dir / "landcover.geojson"
@@ -140,6 +141,56 @@ class TileProcessor:
             str(self.output_dir),
             make_source(self.ortho_source),
         )
+
+    def _stage_classify_buildings(self) -> None:
+        """Classify ambiguous buildings (building=yes) using Bedrock LLM."""
+        if self.auto:
+            return
+
+        buildings_path = self.output_dir / "buildings.geojson"
+        if not buildings_path.exists():
+            return
+
+        fc: dict[str, Any] = json.loads(buildings_path.read_text(encoding="utf-8"))
+        ambiguous = [
+            f for f in fc.get("features", []) if f.get("properties", {}).get("building") == "yes"
+        ]
+
+        if not ambiguous:
+            console.print("[dim]  No ambiguous buildings to classify[/dim]")
+            return
+
+        console.print(f"[cyan]Classifying {len(ambiguous)} ambiguous buildings via Bedrock…[/cyan]")
+
+        from xplane_gen.classifier import BedrockClassifier
+
+        classifier = BedrockClassifier(
+            output_dir=self.output_dir,
+            review_all=self.review_all,
+        )
+
+        import numpy as np
+
+        dummy_image = np.zeros((64, 64, 3), dtype=np.uint8)
+
+        for feat in ambiguous:
+            props = feat.get("properties", {})
+            result = classifier.classify_building(
+                dummy_image,
+                {k: str(v) for k, v in props.items()},
+                self.lat_min,
+                self.lon_min,
+            )
+            props["building"] = result["building_type"]
+            props["xplane_height_m"] = result["height_m"]
+            props["xplane_confidence"] = result["confidence"]
+
+        # Write updated GeoJSON
+        buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+        console.print(f"  [green]{len(ambiguous)} buildings classified[/green]")
+
+        # Flush review queue if any items were queued
+        classifier.flush_review_queue()
 
     def _stage_review(self) -> None:
         """Launch inline interactive review if --review-all or a review queue exists."""

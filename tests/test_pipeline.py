@@ -66,7 +66,10 @@ def test_run_skips_completed_stages(tmp_path: Path) -> None:
     with (
         patch.object(proc, "_stage_fetch_osm"),
         patch.object(proc, "_stage_fetch_rasters"),
-        patch.object(proc, "_stage_classify"),
+        patch.object(proc, "_stage_annotate"),
+        patch.object(proc, "_stage_fetch_ortho"),
+        patch.object(proc, "_stage_classify_buildings"),
+        patch.object(proc, "_stage_review"),
         patch.object(proc, "_stage_write_dsf"),
         patch.object(proc, "_stage_validate"),
     ):
@@ -96,7 +99,10 @@ def test_dry_run_does_not_compile_dsf(tmp_path: Path) -> None:
     with (
         patch.object(proc, "_stage_fetch_osm"),
         patch.object(proc, "_stage_fetch_rasters"),
-        patch.object(proc, "_stage_classify"),
+        patch.object(proc, "_stage_annotate"),
+        patch.object(proc, "_stage_fetch_ortho"),
+        patch.object(proc, "_stage_classify_buildings"),
+        patch.object(proc, "_stage_review"),
         patch("xplane_gen.dsf.build_overlay") as mock_build,
         patch.object(proc, "_stage_validate"),
     ):
