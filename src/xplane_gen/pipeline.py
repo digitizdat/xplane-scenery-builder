@@ -180,6 +180,7 @@ class TileProcessor:
                 f
                 for f in fc.get("features", [])
                 if f.get("properties", {}).get("building") == "yes"
+                and "xplane_confidence" not in f.get("properties", {})
             ]
             if ambiguous:
                 console.print(f"[cyan]Classifying {len(ambiguous)} buildings…[/cyan]")
@@ -193,7 +194,7 @@ class TileProcessor:
                     props["xplane_type"] = result["building_type"]
                     props["xplane_height_m"] = result["height_m"]
                     props["xplane_confidence"] = result["confidence"]
-                buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Forests ───────────────────────────────────────────────────
         landcover_path = self.output_dir / "landcover.geojson"
@@ -203,6 +204,7 @@ class TileProcessor:
                 f
                 for f in fc.get("features", [])
                 if f.get("properties", {}).get("label") == "tree_cover"
+                and "xplane_confidence" not in f.get("properties", {})
             ]
             if forests:
                 console.print(f"[cyan]Classifying {len(forests)} forest polygons…[/cyan]")
@@ -217,13 +219,17 @@ class TileProcessor:
                     props["xplane_species"] = result["species_mix"]
                     props["xplane_density"] = result["canopy_density"]
                     props["xplane_confidence"] = result["confidence"]
-                landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Roads ─────────────────────────────────────────────────────
         roads_path = self.output_dir / "roads.geojson"
         if roads_path.exists():
             fc = json.loads(roads_path.read_text(encoding="utf-8"))
-            roads = fc.get("features", [])
+            roads = [
+                f
+                for f in fc.get("features", [])
+                if "xplane_confidence" not in f.get("properties", {})
+            ]
             if roads:
                 console.print(f"[cyan]Classifying {len(roads)} road segments…[/cyan]")
                 for i, feat in enumerate(roads, 1):
@@ -252,7 +258,7 @@ class TileProcessor:
                     props["xplane_surface"] = result["surface_type"]
                     props["xplane_lanes"] = result["lane_count"]
                     props["xplane_confidence"] = result["confidence"]
-                roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Summary ───────────────────────────────────────────────────
         if classifier.review_count > 0:
