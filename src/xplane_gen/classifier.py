@@ -19,7 +19,7 @@ console = Console()
 # Model IDs — cross-region inference profiles (required for on-demand access)
 _HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 _SONNET = "us.anthropic.claude-sonnet-4-6"
-_OPUS = "us.anthropic.claude-opus-4-7"
+_OPUS = "us.anthropic.claude-opus-4-6-v1"
 
 # Confidence routing thresholds
 _HIGH = 0.85
@@ -248,19 +248,25 @@ class BedrockClassifier:
         image_bytes = base64.b64decode(image_b64)
         request_kb = (len(image_bytes) + len(prompt.encode())) / 1024
 
-        response = self._client.converse(
-            modelId=model_id,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"image": {"format": "png", "source": {"bytes": image_bytes}}},
-                        {"text": prompt},
-                    ],
-                }
-            ],
-            toolConfig={"tools": [{"toolSpec": tool_spec}]},
-        )
+        try:
+            response = self._client.converse(
+                modelId=model_id,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"image": {"format": "png", "source": {"bytes": image_bytes}}},
+                            {"text": prompt},
+                        ],
+                    }
+                ],
+                toolConfig={"tools": [{"toolSpec": tool_spec}]},
+            )
+        except Exception as exc:  # noqa: BLE001
+            if "AccessDenied" in type(exc).__name__ or "AccessDenied" in str(exc):
+                console.print(f"[yellow]    ⚠ {model_id} not available — using fallback[/yellow]")
+                return fallback
+            raise
 
         usage = response.get("usage", {})
         # Extract short name: "us.anthropic.claude-haiku-4-5-..." → "haiku-4-5"
