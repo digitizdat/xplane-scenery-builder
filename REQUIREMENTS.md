@@ -475,3 +475,98 @@ This is within the $5/tile target. Tiles with sparse OSM data (requiring more vi
 | Review UI | Simple CLI (`rich` library) or minimal Flask app |
 | Testing | `pytest` |
 | Infrastructure (Phase 3) | AWS Lambda + SQS for tile queue; S3 for intermediate data |
+
+---
+
+## 12. Expanded Asset Placement Requirements (Phase 2+)
+
+Based on analysis of the X-Plane 12 default library (20,539 exported virtual paths),
+the following additional feature types should be classified and placed by the LLM
+annotation stage. These extend the original FR-3 (Classification) requirements.
+
+### FR-8: Species-Specific Forest Classification
+- The system SHALL use LLM vision to identify dominant tree species (oak, maple, birch, pine, spruce, fir) from satellite imagery.
+- The system SHALL map identified species to `lib/vegetation/trees/deciduous/*.for` or `lib/vegetation/trees/coniferous/*.for` paths.
+- The system SHALL use `lib/vegetation/forests/broadleaves/*.for`, `conifers/*.for`, or `mixed/*.for` for area forests, selecting the climate-appropriate variant.
+- The system SHALL fall back to generic `broadleaf.for`/`conifer.for` when confidence is below threshold.
+
+### FR-9: Fencing and Barriers
+- The system SHALL identify fences, walls, and hedges from OSM `barrier=*` tags and satellite imagery.
+- The system SHALL classify fence type (wood, metal, mesh, hedge, brick wall, concrete) and map to `lib/constructions/fencing/*.fac` paths.
+- The system SHALL place fences as facade polygons along property boundaries.
+- Available types: wood (9), metal (8), mesh (12), hedge (6), brick (4), wall (17), industrial (2), garden (1).
+
+### FR-10: Industrial Area Clutter
+- The system SHALL identify industrial/commercial areas from OSM `landuse=industrial` or `landuse=commercial` tags.
+- The system SHALL place contextually appropriate objects: storage tanks, shipping containers, goods/pallets, construction equipment.
+- The system SHALL use LLM vision to determine the specific industrial activity (container yard, lumber yard, fuel depot, construction site) and select matching objects from `lib/industrial_area/`.
+
+### FR-11: Street Furniture and Urban Detail
+- The system SHALL place streetlights along roads using OSM `highway=street_lamp` nodes or by inferring from road class.
+- The system SHALL place waste bins, benches, and bollards in urban areas using `lib/street/furniture/` and `lib/street/waste_management/` objects.
+- The system SHALL use LLM vision to assess urban density and place appropriate quantities.
+
+### FR-12: Parked Vehicles
+- The system SHALL identify parking areas from OSM `amenity=parking` polygons.
+- The system SHALL place static vehicle objects (`lib/cars/car_static.obj`, `lib/vehicles/static/trucks/`) within parking polygons.
+- The system SHALL drape `lib/terrain/urban/asphalt_worn_*.pol` ground texture on parking areas.
+- The system SHALL use LLM vision to estimate parking lot fullness and vehicle mix.
+
+### FR-13: Sports and Recreation Facilities
+- The system SHALL identify sports facilities from OSM `leisure=pitch` and `leisure=sports_centre` tags.
+- The system SHALL place appropriate equipment objects (goals, hoops, nets) from `lib/public_area/sports/`.
+- The system SHALL use LLM vision to identify sport type when OSM `sport=*` tag is absent.
+
+### FR-14: Solar Installations
+- The system SHALL identify solar farms from OSM `landuse=solar` or `power=generator` + `generator:source=solar` tags.
+- The system SHALL place solar panel objects/strings from `lib/constructions/solar_plant/`.
+- The system SHALL use LLM vision to estimate panel row orientation and density.
+
+### FR-15: Communication Towers and Antennas
+- The system SHALL identify antenna/tower locations from OSM `man_made=antenna`, `man_made=mast`, `tower:type=communication` tags.
+- The system SHALL select appropriate antenna objects from `lib/constructions/antennas/` (33 variants).
+
+### FR-16: Ground Cover Polygons
+- The system SHALL drape ground texture polygons for identified surface types:
+  - Parking lots: `lib/terrain/urban/asphalt_worn_*.pol`
+  - Sidewalks: `lib/terrain/urban/sidewalk_1.pol`
+- The system SHALL use LLM vision to identify paved areas not tagged in OSM.
+
+### FR-17: Walkways and Paths
+- The system SHALL place walkway line features from OSM `highway=footway`, `highway=path`, `highway=cycleway`.
+- The system SHALL select surface-appropriate line type: `lib/g10/autogen/walkway/dirt.lin`, `concrete.lin`, or `asphalt.lin`.
+- The system SHALL use LLM vision or OSM `surface=*` tag to determine material.
+
+### FR-18: Ships and Watercraft (Coastal/Harbor Areas)
+- The system SHALL identify harbors and marinas from OSM `leisure=marina`, `waterway=dock` tags.
+- The system SHALL place appropriate vessel objects from `lib/ships/` based on harbor type (commercial → cargo ships, recreational → sailboats).
+
+---
+
+## 13. LLM Annotation Scope (Revised)
+
+The LLM classify stage processes ALL feature types, not just ambiguous buildings.
+For each feature, the LLM receives a satellite image patch + OSM context and returns
+structured classification used to select from the full 20,539-path asset library.
+
+### Classification Categories
+
+| Feature Type | LLM Output | Asset Selection |
+|-------------|-----------|-----------------|
+| Building (ambiguous) | type, height, roof material | `.fac` path |
+| Forest polygon | species mix, density | `.for` path (species-specific) |
+| Road segment | surface, lanes, condition | `.net` or exclusion |
+| Fence/barrier | material, height | `.fac` path |
+| Industrial area | activity type | `.obj` selection |
+| Parking lot | fullness, vehicle mix | `.pol` + `.obj` placement |
+| Sports facility | sport type | `.obj` selection |
+| Solar installation | panel orientation, density | `.obj`/`.str` placement |
+| Urban area | density, character | Street furniture density |
+| Waterfront | harbor type | Ship `.obj` selection |
+
+### Cost Impact
+
+Additional features increase per-tile LLM calls from ~567 (buildings+forests+roads only)
+to ~1,500–2,000 (all feature types). At the same 70/20/10 tier distribution:
+- Estimated cost: ~$1.50–2.00/tile (still well under $5 budget)
+- Most new features (fences, parking, streetlights) are simple classifications resolved by Haiku
