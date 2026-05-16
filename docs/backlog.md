@@ -4,9 +4,20 @@
 
 ## ORTHO-001 — Orthophoto ground texture generation
 
-**Status**: Proposed  
+**Status**: Implemented (partial)  
 **Priority**: Medium  
 **Source**: Analysis of Xometry KCRW commercial scenery pack
+
+**What's done**:
+- `ortho.py` module with Sentinel-2 and NAIP sources
+- `--ortho-source sentinel2|naip` CLI flag
+- `fetch_ortho` pipeline stage (resumable, tile-based)
+- PNG + `.pol` output per tile
+
+**Remaining gap**: The `write_dsf` stage does not reference the orthophoto
+`.pol` tiles in the DSF. The tiles are generated on disk but not placed as
+draped polygons in the overlay. This requires adding `POLYGON_DEF` entries
+and polygon placements to `dsf.py`'s `build_overlay()` function.
 
 ### Background
 

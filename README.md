@@ -1,7 +1,7 @@
 # xplane-scenery-builder
 
 Automates the production of X-Plane 11/12 overlay scenery packs from freely
-available geospatial data (OpenStreetMap, ESA WorldCover, Sentinel-2) and
+available geospatial data (OpenStreetMap, ESA WorldCover, Sentinel-2, NAIP) and
 optionally Amazon Bedrock LLM classification.
 
 ## How it works
@@ -11,10 +11,11 @@ For a given lat/lon bounding box the pipeline:
 1. Fetches building footprints, roads, and land-use polygons from OpenStreetMap
 2. Fetches ESA WorldCover land classification (10 m raster)
 3. Annotates forest polygons with NDVI-derived density from Sentinel-2
-4. Maps features to X-Plane library assets via a YAML catalog
-5. Writes a DSF overlay and compiles it with DSFTool
-6. Optionally runs Bedrock LLM classification for ambiguous buildings and
-   produces a human review queue
+4. Optionally fetches orthophoto ground texture tiles (Sentinel-2 RGB or NAIP)
+5. Optionally classifies buildings, forests, and roads via Bedrock LLM vision
+6. Optionally pauses for interactive human review of low-confidence items
+7. Maps features to X-Plane library assets via a YAML catalog
+8. Writes a DSF overlay and compiles it with DSFTool
 
 The output is a scenery pack folder you drop into X-Plane's `Custom Scenery/`
 directory.
@@ -25,7 +26,7 @@ directory.
 - [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **DSFTool** from [xptools](https://github.com/X-Plane/xptools) — build from
   source or place the binary on `PATH` (or at `tools/DSFTool` in this repo)
-- AWS credentials configured (for Sentinel-2 on S3 and optionally Bedrock)
+- AWS credentials configured for Bedrock only (public S3 data uses anonymous access)
 
 ## Installation
 
@@ -46,36 +47,42 @@ All commands are run via `uv run` so you never need to activate the virtualenv m
 uv run xplane-gen generate --bbox LAT_MIN,LON_MIN,LAT_MAX,LON_MAX --output ./my_scenery
 ```
 
-Example — Seattle area:
+Example — Green Bank, WV:
 
 ```bash
-uv run xplane-gen generate --bbox 47.5,-122.5,48.5,-121.5 --output ./seattle_scenery
+uv run xplane-gen generate --bbox 38.4,-79.9,38.45,-79.8 --output ./green_bank
 ```
 
-The pipeline runs five stages (`fetch_osm → fetch_rasters → classify →
-write_dsf → validate`) and writes state to `tile_state.json` so a failed run
-can be resumed from where it left off.
+The pipeline runs eight stages and writes state to `tile_state.json` so a
+failed run can be resumed from where it left off:
+
+```
+fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review → write_dsf → validate
+```
 
 **Options:**
 
 | Flag | Description |
 |------|-------------|
-| `--dry-run` | Run all stages but skip DSFTool compilation; writes a text preview instead |
-| `--auto` | Skip human review; use best-guess classifications for all items |
+| `--dry-run` | Skip DSFTool compilation; write a text preview instead |
+| `--auto` | Skip LLM classification and human review; use deterministic mapping only |
 | `--dsftool PATH` | Path to DSFTool binary if not on `PATH` |
+| `--ortho-source sentinel2\|naip` | Fetch orthophoto ground texture tiles. Omit to skip |
+| `--regen` | Regenerate from cached data without re-downloading |
+| `--review-all` | Force all LLM classifications to human review |
 
 ### Install the output in X-Plane
 
 ```bash
-cp -r ./my_scenery "/path/to/X-Plane 12/Custom Scenery/my_scenery"
+cp -r "./my_scenery/Earth nav data" "/path/to/X-Plane 12/Custom Scenery/my_scenery/"
 ```
 
 Restart X-Plane and fly over the area.
 
-### Review ambiguous classifications (Phase 2 / LLM mode)
+### Review ambiguous classifications
 
-After a run with LLM classification enabled, low-confidence items are written
-to `review_queue.json`. Review them interactively:
+After a run with LLM classification, low-confidence items are written to
+`review_queue.json`. Review them interactively:
 
 ```bash
 uv run xplane-gen review --queue ./my_scenery/review_queue.json \
@@ -83,8 +90,8 @@ uv run xplane-gen review --queue ./my_scenery/review_queue.json \
 ```
 
 Press **Enter** to accept the suggestion, or type a replacement building type.
-Similar items are grouped for batch approval. Re-run `generate` after reviewing
-to apply your decisions without re-calling Bedrock.
+Similar items are grouped for batch approval. Re-run `generate --regen` after
+reviewing to rebuild the DSF with your decisions.
 
 ### Other commands
 
@@ -119,17 +126,12 @@ All commits must pass `make precommit` and follow
 | Building footprints, roads, land use | OpenStreetMap via Overpass API | ODbL |
 | Land classification (10 m) | ESA WorldCover 2021 (`s3://esa-worldcover/`) | CC-BY |
 | Satellite imagery / NDVI | Sentinel-2 L2A (`s3://sentinel-cogs/`) | Free / Copernicus |
-| Building heights (fallback) | Microsoft GlobalMLBuildingFootprints | ODbL |
+| Orthophoto (US, 1 m) | NAIP (`s3://naip-analytic/`) | Public domain |
 
 ## AWS permissions required
 
-For Sentinel-2 and ESA WorldCover (public S3 buckets, no auth needed beyond
-standard AWS credentials):
-
-```
-s3:GetObject on arn:aws:s3:::sentinel-cogs/*
-s3:GetObject on arn:aws:s3:::esa-worldcover/*
-```
+Sentinel-2, ESA WorldCover, and NAIP are public S3 buckets accessed with
+anonymous requests — no AWS credentials needed.
 
 For Bedrock LLM classification (optional):
 
@@ -141,16 +143,22 @@ bedrock:InvokeModel on the Haiku, Sonnet, and Opus model ARNs in us-east-1
 
 ```
 src/xplane_gen/
-  dsf.py          DsfWriter, build_overlay — DSF text format and compiler
-  osm.py          OSM data fetcher (Overpass API)
+  cli.py          Click CLI entry point
+  pipeline.py     TileProcessor — resumable 8-stage state machine
+  osm.py          OSM data fetcher (Overpass API, multi-endpoint failover)
   landcover.py    ESA WorldCover raster → land-cover GeoJSON
   ndvi.py         Sentinel-2 NDVI → forest density annotation
+  ortho.py        Orthophoto tiles (Sentinel-2 RGB or NAIP) → PNG + .pol
+  classifier.py   Bedrock LLM classifier (buildings, forests, roads) with tiered routing
   buildings.py    OSM building footprints → FacadeFeature placements
   catalog.py      Asset catalog: building type / climate zone → library paths
-  pipeline.py     TileProcessor — resumable stage state machine
-  classifier.py   Bedrock LLM classifier with tiered routing + review queue
   review.py       HITL review CLI
-  cli.py          Click CLI entry point
+  dsf.py          DsfWriter, build_overlay — DSF text format and compiler
 assets/
-  catalog.yaml    Building type and forest type → X-Plane virtual path mappings
+  catalog.yaml    Building type and forest type → X-Plane 12 virtual path mappings
+docs/
+  asset-catalog.md         How the X-Plane virtual library system works
+  xp12-asset-inventory.md  Complete inventory of X-Plane 12 default library (20,539 paths)
+  llm-annotation-design.md Design for LLM-based feature classification
+  backlog.md               Feature backlog
 ```
