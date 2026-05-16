@@ -14,7 +14,7 @@ from shapely.validation import make_valid
 
 console = Console()
 
-STAGES = ["fetch_osm", "fetch_rasters", "classify", "write_dsf", "validate", "done"]
+STAGES = ["fetch_osm", "fetch_rasters", "classify", "fetch_ortho", "write_dsf", "validate", "done"]
 
 
 class TileProcessor:
@@ -28,6 +28,7 @@ class TileProcessor:
         dry_run: bool = False,
         auto: bool = False,
         dsftool: Path | None = None,
+        ortho_source: str | None = None,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -37,6 +38,7 @@ class TileProcessor:
         self.dry_run = dry_run
         self.auto = auto
         self.dsftool = dsftool
+        self.ortho_source = ortho_source
 
         # Tile SW corner (integer degrees)
         self.tile_west = int(math.floor(lon_min))
@@ -107,6 +109,20 @@ class TileProcessor:
         lc = self.output_dir / "landcover.geojson"
         if lc.exists():
             annotate_forest_density(lc, self.lat_min, self.lon_min, self.lat_max, self.lon_max)
+
+    def _stage_fetch_ortho(self) -> None:
+        if self.ortho_source is None:
+            return
+        from xplane_gen.ortho import fetch_ortho_tiles, make_source
+
+        fetch_ortho_tiles(
+            self.lat_min,
+            self.lon_min,
+            self.lat_max,
+            self.lon_max,
+            str(self.output_dir),
+            make_source(self.ortho_source),
+        )
 
     def _stage_write_dsf(self) -> None:
         from xplane_gen.dsf import build_overlay

@@ -79,7 +79,20 @@ def classify_land(bbox: str, output: str) -> None:
 @click.option("--dry-run", is_flag=True)
 @click.option("--auto", is_flag=True, help="Skip human review, use best-guess.")
 @click.option("--dsftool", default=None)
-def generate(bbox: str, output: str, dry_run: bool, auto: bool, dsftool: str | None) -> None:
+@click.option(
+    "--ortho-source",
+    type=click.Choice(["sentinel2", "naip"]),
+    default=None,
+    help="Satellite imagery source for orthophoto ground texture. Omit to skip.",
+)
+def generate(
+    bbox: str,
+    output: str,
+    dry_run: bool,
+    auto: bool,
+    dsftool: str | None,
+    ortho_source: str | None,
+) -> None:
     """Task 8: End-to-end tile generation pipeline."""
     from pathlib import Path
 
@@ -95,6 +108,7 @@ def generate(bbox: str, output: str, dry_run: bool, auto: bool, dsftool: str | N
         dry_run=dry_run,
         auto=auto,
         dsftool=Path(dsftool) if dsftool else None,
+        ortho_source=ortho_source,
     )
     proc.run()
 
