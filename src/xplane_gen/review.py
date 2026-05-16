@@ -13,7 +13,11 @@ from rich.table import Table
 
 console = Console()
 
-_VALID_TYPES = {"residential", "commercial", "industrial", "religious", "agricultural", "generic"}
+_VALID_TYPES = {
+    "residential", "commercial", "industrial", "religious", "agricultural", "generic",
+    "deciduous", "conifer", "mixed",
+    "asphalt", "gravel", "dirt", "concrete",
+}
 
 
 def run_review(queue_path: str, output_path: str) -> None:
@@ -50,11 +54,20 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     i = 0
     while i < len(items):
         item = items[i]
-        guess = item["building_type"]
+        result = item.get("result", item)
+        guess = (
+            result.get("building_type")
+            or result.get("species_mix")
+            or result.get("surface_type")
+            or "unknown"
+        )
 
-        # Find similar items (same building_type guess) ahead in queue
+        # Find similar items (same classification guess) ahead in queue
         similar_indices = [
-            j for j in range(i + 1, len(items)) if items[j]["building_type"] == guess
+            j for j in range(i + 1, len(items))
+            if (items[j].get("result", items[j]).get("building_type")
+                or items[j].get("result", items[j]).get("species_mix")
+                or items[j].get("result", items[j]).get("surface_type")) == guess
         ]
 
         _show_item(item, i + 1, len(items))
@@ -69,7 +82,7 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         else:
             apply_to_all = False
 
-        decision = _prompt(f"  building_type [{guess}]: ").strip()
+        decision = _prompt(f"  classification [{guess}]: ").strip()
         if not decision:
             decision = guess
         decision = _validate_type(decision, guess)
@@ -93,13 +106,24 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _show_item(item: dict[str, Any], index: int, total: int) -> None:
+    result = item.get("result", item)
+    tool = item.get("tool", "classify_building")
     table = Table(show_header=False, box=None, padding=(0, 1))
-    table.add_row("[dim]Confidence[/dim]", f"{item['confidence']:.0%}")
-    table.add_row("[dim]Suggestion[/dim]", f"[bold]{item['building_type']}[/bold]")
-    table.add_row("[dim]Height[/dim]", f"{item['height_m']:.1f} m")
-    table.add_row("[dim]Reasoning[/dim]", item.get("reasoning", "—"))
-    tags = ", ".join(f"{k}={v}" for k, v in item.get("osm_tags", {}).items())
-    table.add_row("[dim]OSM tags[/dim]", tags or "—")
+    table.add_row("[dim]Type[/dim]", tool)
+    table.add_row("[dim]Confidence[/dim]", f"{result.get('confidence', 0):.0%}")
+    guess = (
+        result.get("building_type")
+        or result.get("species_mix")
+        or result.get("surface_type")
+        or "unknown"
+    )
+    table.add_row("[dim]Suggestion[/dim]", f"[bold]{guess}[/bold]")
+    if "height_m" in result:
+        table.add_row("[dim]Height[/dim]", f"{result['height_m']:.1f} m")
+    if "canopy_density" in result:
+        table.add_row("[dim]Density[/dim]", f"{result['canopy_density']:.2f}")
+    if "lane_count" in result:
+        table.add_row("[dim]Lanes[/dim]", str(result["lane_count"]))
 
     # Save thumbnail if present
     if thumb := item.get("thumbnail_b64"):
