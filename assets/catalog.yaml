@@ -34,11 +34,11 @@ facades:
 forests:
   # ESA class 10: tree cover
   tree_cover:
-    tropical:    tropical.for
-    arid:        broadleaf_sparse.for
-    temperate:   broadleaf.for
-    continental: broadleaf_cold.for
-    polar:       conifer_cold.for
+    tropical:    lib/vegetation/forests/broadleaves/very_hot.for
+    arid:        lib/vegetation/forests/broadleaves/hot_dry.for
+    temperate:   lib/vegetation/forests/broadleaves/temperate.for
+    continental: lib/vegetation/forests/broadleaves/cold.for
+    polar:       lib/vegetation/forests/conifers/cold.for
   # ESA class 20: shrubland
   shrubland:
     tropical:    lib/g8/shrb_tmp_rain.for
@@ -48,18 +48,18 @@ forests:
     polar:       lib/g8/shrb_cld_dry.for
   # ESA class 30: grassland
   grassland:
-    tropical:    savanna.for
-    arid:        savanna.for
-    temperate:   mixed.for
-    continental: mixed.for
-    polar:       tundra.for
+    tropical:    lib/vegetation/forests/mixed/very_hot.for
+    arid:        lib/vegetation/forests/mixed/hot_dry.for
+    temperate:   lib/vegetation/forests/mixed/temperate.for
+    continental: lib/vegetation/forests/mixed/cold.for
+    polar:       lib/vegetation/forests/conifers/cold_low.for
   # ESA class 40: cropland
   cropland:
-    tropical:    savanna.for
-    arid:        savanna.for
-    temperate:   mixed.for
-    continental: mixed.for
-    polar:       tundra.for
+    tropical:    lib/vegetation/AG_hot_dry_1.for
+    arid:        lib/vegetation/AG_hot_dry_1.for
+    temperate:   lib/vegetation/AG_temp_1.for
+    continental: lib/vegetation/AG_temp_2.for
+    polar:       lib/vegetation/forests/conifers/cold_low.for
   # ESA class 90: wetland
   wetland:
     tropical:    lib/g8/shrb_tmp_rain.for
@@ -69,11 +69,11 @@ forests:
     polar:       lib/g8/shrb_cld_wet.for
   # ESA class 95: mangrove
   mangrove:
-    tropical:    tropical.for
-    arid:        tropical.for
-    temperate:   tropical.for
-    continental: tropical.for
-    polar:       tropical.for
+    tropical:    lib/vegetation/forests/broadleaves/very_hot.for
+    arid:        lib/vegetation/forests/broadleaves/very_hot.for
+    temperate:   lib/vegetation/forests/broadleaves/warm.for
+    continental: lib/vegetation/forests/broadleaves/warm.for
+    polar:       lib/vegetation/forests/broadleaves/warm.for
   # ESA class 100: moss/lichen
   moss_lichen:
     tropical:    lib/g8/shrb_cld_dry.for

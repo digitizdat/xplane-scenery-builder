@@ -82,12 +82,12 @@ def test_get_facade_all_osm_types(cat: AssetCatalog) -> None:
 
 def test_get_forest_tree_cover_temperate(cat: AssetCatalog) -> None:
     path = cat.get_forest("tree_cover", 47.6, -122.3)
-    assert any(k in path for k in ("decid", "evgr", "tropical", "broadleaf", "conifer"))
+    assert "broadleaves" in path or "conifers" in path or "mixed" in path
 
 
 def test_get_forest_tropical(cat: AssetCatalog) -> None:
     path = cat.get_forest("tree_cover", 5.0, 100.0)
-    assert "tropical" in path
+    assert "very_hot" in path or "hot" in path
 
 
 def test_get_forest_unknown_label_falls_back(cat: AssetCatalog) -> None:
@@ -148,11 +148,8 @@ def _find_library_exports(xplane_path: str) -> set[str]:
 
 
 def _find_direct_files(xplane_path: str) -> set[str]:
-    """Find .for/.fac files that X-Plane loads directly (no library.txt needed)."""
-    from pathlib import Path
-
-    root = Path(xplane_path) / "Resources" / "default scenery" / "900 forests"
-    return {f.name for f in root.glob("*.for")} if root.exists() else set()
+    """Not used — DSFs can only reference library-exported virtual paths."""
+    return set()
 
 
 @pytest.mark.xplane
@@ -164,12 +161,11 @@ def test_all_catalog_forests_resolve(cat: AssetCatalog) -> None:
         pytest.skip(f"X-Plane not found at {XPLANE_PATH}")
 
     exports = _find_library_exports(XPLANE_PATH)
-    direct = _find_direct_files(XPLANE_PATH)
     missing = []
 
     for label, zones in cat._forests.items():
         for zone, vpath in zones.items():
-            if vpath in exports or vpath in direct:
+            if vpath in exports:
                 continue
             missing.append(f"forests/{label}/{zone}: {vpath}")
 

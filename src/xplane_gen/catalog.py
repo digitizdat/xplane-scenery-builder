@@ -92,7 +92,6 @@ class AssetCatalog:
         """Check that all virtual paths resolve in X-Plane's library system."""
         lib_root = xplane_path / "Resources" / "default scenery"
         exports = _parse_library_exports(lib_root)
-        direct_for = {f.name for f in (lib_root / "900 forests").glob("*.for")}
 
         ok = True
         for btype, sizes in self._facades.items():
@@ -104,7 +103,7 @@ class AssetCatalog:
                 console.print(f"  [{status}] facades/{btype}/{size}: {vpath}")
         for label, zones in self._forests.items():
             for zone, vpath in zones.items():
-                found = vpath in exports or vpath in direct_for
+                found = vpath in exports
                 status = "✓" if found else "✗"
                 if not found:
                     ok = False
