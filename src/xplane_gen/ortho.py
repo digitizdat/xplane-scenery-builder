@@ -88,21 +88,24 @@ class Sentinel2Source:
 
         bands: list[np.ndarray] = []
         shape_hw: tuple[int, int] | None = None
-        for asset_key in ("red", "green", "blue"):
-            href = item.assets[asset_key].href
-            with rasterio.open(href) as src:
-                crs = src.crs
-                if crs != bbox_crs:
-                    w, s, e, n = transform_bounds(bbox_crs, crs, lon_min, lat_min, lon_max, lat_max)
-                else:
-                    w, s, e, n = lon_min, lat_min, lon_max, lat_max
-                window = src.window(w, s, e, n)
-                if shape_hw is None:
-                    data = src.read(1, window=window)
-                    shape_hw = data.shape
-                else:
-                    data = src.read(1, window=window, out_shape=shape_hw)
-                bands.append(data.astype(np.float32))
+        with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"):
+            for asset_key in ("red", "green", "blue"):
+                href = item.assets[asset_key].href
+                with rasterio.open(href) as src:
+                    crs = src.crs
+                    if crs != bbox_crs:
+                        w, s, e, n = transform_bounds(
+                            bbox_crs, crs, lon_min, lat_min, lon_max, lat_max
+                        )
+                    else:
+                        w, s, e, n = lon_min, lat_min, lon_max, lat_max
+                    window = src.window(w, s, e, n)
+                    if shape_hw is None:
+                        data = src.read(1, window=window)
+                        shape_hw = data.shape
+                    else:
+                        data = src.read(1, window=window, out_shape=shape_hw)
+                    bands.append(data.astype(np.float32))
 
         return _reflectance_to_uint8(np.stack(bands, axis=-1))
 
@@ -142,7 +145,7 @@ class NAIPSource:
         href = item.assets["image"].href
         bbox_crs = CRS.from_epsg(4326)
 
-        with rasterio.open(href) as src:
+        with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(href) as src:
             crs = src.crs
             if crs != bbox_crs:
                 w, s, e, n = transform_bounds(bbox_crs, crs, lon_min, lat_min, lon_max, lat_max)

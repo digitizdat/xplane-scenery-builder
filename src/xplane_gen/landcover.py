@@ -98,7 +98,7 @@ def _vectorise(
     lon_max: float,
 ) -> list[dict[str, Any]]:
     """Open raster, clip to bbox, vectorise contiguous regions by class code."""
-    with rasterio.open(raster_path) as src:
+    with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(raster_path) as src:
         # Transform bbox to raster CRS if needed
         bbox_crs = CRS.from_epsg(4326)
         if src.crs != bbox_crs:

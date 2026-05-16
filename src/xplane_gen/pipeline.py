@@ -61,6 +61,8 @@ class TileProcessor:
 
         if regen:
             self._reset_to_cached_data()
+        if review_all:
+            self._force_stage("review")
 
     # ------------------------------------------------------------------ #
     # Public                                                               #
@@ -143,10 +145,31 @@ class TileProcessor:
         """Launch inline interactive review if --review-all or a review queue exists."""
         queue_path = self.output_dir / "review_queue.json"
         if not queue_path.exists():
+            if self.review_all:
+                console.print(
+                    "[dim]  No review_queue.json — LLM classification has not run. "
+                    "Review is only available after Bedrock classification.[/dim]"
+                )
             return
+
+        import json as _json
+
+        items = _json.loads(queue_path.read_text(encoding="utf-8"))
+        if not items:
+            return
+
+        count = len(items)
+        console.print(f"\n[bold yellow]⚠ {count} item(s) queued for human review.[/bold yellow]")
+
         if self.auto:
-            console.print("[dim]  --auto: skipping human review[/dim]")
+            console.print("[dim]  --auto: accepting LLM suggestions without review[/dim]")
             return
+
+        console.print(
+            "  Review now interactively, or quit and run later with:\n"
+            f"  [bold]uv run xplane-gen review "
+            f"--queue {queue_path} --output {self.output_dir / 'resolved_queue.json'}[/bold]\n"
+        )
 
         from xplane_gen.review import run_review
 
@@ -208,6 +231,13 @@ class TileProcessor:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.state_file.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
         console.print("[cyan]Regenerating from cached data…[/cyan]")
+
+    def _force_stage(self, stage: str) -> None:
+        """Remove a stage from completed list so it re-runs."""
+        completed = self._state.get("completed", [])
+        if stage in completed:
+            completed.remove(stage)
+            self.state_file.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():

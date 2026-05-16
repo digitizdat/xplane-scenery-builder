@@ -102,7 +102,11 @@ def _fetch_ndvi(
     b04_href = item.assets["red"].href
     b08_href = item.assets["nir"].href
 
-    with rasterio.open(b04_href) as src_red, rasterio.open(b08_href) as src_nir:
+    with (
+        rasterio.Env(AWS_NO_SIGN_REQUEST="YES"),
+        rasterio.open(b04_href) as src_red,
+        rasterio.open(b08_href) as src_nir,
+    ):
         crs = src_red.crs
         bbox_crs = CRS.from_epsg(4326)
         if crs != bbox_crs:
