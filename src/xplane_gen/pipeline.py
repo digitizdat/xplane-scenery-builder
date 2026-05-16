@@ -19,7 +19,7 @@ STAGES = [
     "fetch_rasters",
     "annotate",
     "fetch_ortho",
-    "classify_buildings",
+    "classify",
     "review",
     "write_dsf",
     "validate",
@@ -142,55 +142,110 @@ class TileProcessor:
             make_source(self.ortho_source),
         )
 
-    def _stage_classify_buildings(self) -> None:
-        """Classify ambiguous buildings (building=yes) using Bedrock LLM."""
+    def _stage_classify(self) -> None:
+        """Classify buildings, forests, and roads using Bedrock LLM vision."""
         if self.auto:
             return
 
-        buildings_path = self.output_dir / "buildings.geojson"
-        if not buildings_path.exists():
-            return
-
-        fc: dict[str, Any] = json.loads(buildings_path.read_text(encoding="utf-8"))
-        ambiguous = [
-            f for f in fc.get("features", []) if f.get("properties", {}).get("building") == "yes"
-        ]
-
-        if not ambiguous:
-            console.print("[dim]  No ambiguous buildings to classify[/dim]")
-            return
-
-        console.print(f"[cyan]Classifying {len(ambiguous)} ambiguous buildings via Bedrock…[/cyan]")
-
-        from xplane_gen.classifier import BedrockClassifier
+        from xplane_gen.classifier import BedrockClassifier, crop_patch
 
         classifier = BedrockClassifier(
             output_dir=self.output_dir,
             review_all=self.review_all,
         )
-
+        tile_bbox = (self.lon_min, self.lat_min, self.lon_max, self.lat_max)
         import numpy as np
 
-        dummy_image = np.zeros((64, 64, 3), dtype=np.uint8)
+        dummy = np.zeros((256, 256, 3), dtype=np.uint8)
 
-        for feat in ambiguous:
-            props = feat.get("properties", {})
-            result = classifier.classify_building(
-                dummy_image,
-                {k: str(v) for k, v in props.items()},
-                self.lat_min,
-                self.lon_min,
-            )
-            props["building"] = result["building_type"]
-            props["xplane_height_m"] = result["height_m"]
-            props["xplane_confidence"] = result["confidence"]
+        def _get_patch(geom: dict[str, Any]) -> np.ndarray:
+            coords = geom.get("coordinates", [[]])[0] if geom.get("type") == "Polygon" else []
+            if not coords:
+                return dummy
+            lons = [c[0] for c in coords]
+            lats = [c[1] for c in coords]
+            bbox = (min(lons), min(lats), max(lons), max(lats))
+            patch = crop_patch(self.output_dir, bbox, tile_bbox)
+            return patch if patch is not None else dummy
 
-        # Write updated GeoJSON
-        buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
-        console.print(f"  [green]{len(ambiguous)} buildings classified[/green]")
+        # ── Buildings ─────────────────────────────────────────────────
+        buildings_path = self.output_dir / "buildings.geojson"
+        if buildings_path.exists():
+            fc = json.loads(buildings_path.read_text(encoding="utf-8"))
+            ambiguous = [
+                f
+                for f in fc.get("features", [])
+                if f.get("properties", {}).get("building") == "yes"
+            ]
+            if ambiguous:
+                console.print(f"[cyan]Classifying {len(ambiguous)} buildings…[/cyan]")
+                for feat in ambiguous:
+                    props = feat.get("properties", {})
+                    patch = _get_patch(feat.get("geometry", {}))
+                    result = classifier.classify_building(
+                        patch, {k: str(v) for k, v in props.items()}
+                    )
+                    props["xplane_type"] = result["building_type"]
+                    props["xplane_height_m"] = result["height_m"]
+                    props["xplane_confidence"] = result["confidence"]
+                buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
-        # Flush review queue if any items were queued
-        classifier.flush_review_queue()
+        # ── Forests ───────────────────────────────────────────────────
+        landcover_path = self.output_dir / "landcover.geojson"
+        if landcover_path.exists():
+            fc = json.loads(landcover_path.read_text(encoding="utf-8"))
+            forests = [
+                f
+                for f in fc.get("features", [])
+                if f.get("properties", {}).get("label") == "tree_cover"
+            ]
+            if forests:
+                console.print(f"[cyan]Classifying {len(forests)} forest polygons…[/cyan]")
+                for feat in forests:
+                    props = feat.get("properties", {})
+                    patch = _get_patch(feat.get("geometry", {}))
+                    ndvi = float(props.get("ndvi_density", 0.7))
+                    result = classifier.classify_forest(
+                        patch, props.get("label", "tree_cover"), ndvi
+                    )
+                    props["xplane_species"] = result["species_mix"]
+                    props["xplane_density"] = result["canopy_density"]
+                    props["xplane_confidence"] = result["confidence"]
+                landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+
+        # ── Roads ─────────────────────────────────────────────────────
+        roads_path = self.output_dir / "roads.geojson"
+        if roads_path.exists():
+            fc = json.loads(roads_path.read_text(encoding="utf-8"))
+            roads = fc.get("features", [])
+            if roads:
+                console.print(f"[cyan]Classifying {len(roads)} road segments…[/cyan]")
+                for feat in roads:
+                    props = feat.get("properties", {})
+                    geom = feat.get("geometry", {})
+                    # For linestrings, use midpoint bbox
+                    coords = geom.get("coordinates", [])
+                    road_patch = dummy
+                    if coords:
+                        lons = [c[0] for c in coords]
+                        lats = [c[1] for c in coords]
+                        bbox = (min(lons), min(lats), max(lons), max(lats))
+                        cropped = crop_patch(self.output_dir, bbox, tile_bbox)
+                        if cropped is not None:
+                            road_patch = cropped
+                    result = classifier.classify_road(
+                        road_patch,
+                        {k: str(v) for k, v in props.items()},
+                    )
+                    props["xplane_surface"] = result["surface_type"]
+                    props["xplane_lanes"] = result["lane_count"]
+                    props["xplane_confidence"] = result["confidence"]
+                roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+
+        # ── Summary ───────────────────────────────────────────────────
+        if classifier.review_count > 0:
+            classifier.flush_review_queue()
+            console.print(f"  [yellow]{classifier.review_count} items queued for review[/yellow]")
 
     def _stage_review(self) -> None:
         """Launch inline interactive review if --review-all or a review queue exists."""
