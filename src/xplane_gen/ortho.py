@@ -145,7 +145,7 @@ class NAIPSource:
         href = item.assets["image"].href
         bbox_crs = CRS.from_epsg(4326)
 
-        with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(href) as src:
+        with rasterio.Env(AWS_REQUEST_PAYER="requester"), rasterio.open(href) as src:
             crs = src.crs
             if crs != bbox_crs:
                 w, s, e, n = transform_bounds(bbox_crs, crs, lon_min, lat_min, lon_max, lat_max)
