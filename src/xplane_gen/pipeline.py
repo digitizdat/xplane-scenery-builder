@@ -126,7 +126,11 @@ class TileProcessor:
 
         lc = self.output_dir / "landcover.geojson"
         if lc.exists():
+            console.print("[cyan]Annotating forest density via Sentinel-2 NDVI…[/cyan]")
             annotate_forest_density(lc, self.lat_min, self.lon_min, self.lat_max, self.lon_max)
+            console.print("[green]  Forest density annotation complete[/green]")
+        else:
+            console.print("[dim]  No landcover.geojson — skipping NDVI annotation[/dim]")
 
     def _stage_fetch_ortho(self) -> None:
         if self.ortho_source is None:

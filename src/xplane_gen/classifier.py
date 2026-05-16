@@ -18,8 +18,8 @@ console = Console()
 
 # Model IDs — cross-region inference profiles (required for on-demand access)
 _HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-_SONNET = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
-_OPUS = "us.anthropic.claude-opus-4-20250514-v1:0"
+_SONNET = "us.anthropic.claude-sonnet-4-6"
+_OPUS = "us.anthropic.claude-opus-4-7"
 
 # Confidence routing thresholds
 _HIGH = 0.85
