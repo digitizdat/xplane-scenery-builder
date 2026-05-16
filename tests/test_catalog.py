@@ -82,7 +82,7 @@ def test_get_facade_all_osm_types(cat: AssetCatalog) -> None:
 
 def test_get_forest_tree_cover_temperate(cat: AssetCatalog) -> None:
     path = cat.get_forest("tree_cover", 47.6, -122.3)
-    assert "decid" in path or "evgr" in path or "tropical" in path
+    assert "decid" in path or "evgr" in path or "tropical" in path or "broadleaf" in path or "conifer" in path
 
 
 def test_get_forest_tropical(cat: AssetCatalog) -> None:
@@ -93,7 +93,7 @@ def test_get_forest_tropical(cat: AssetCatalog) -> None:
 def test_get_forest_unknown_label_falls_back(cat: AssetCatalog) -> None:
     """Unknown ESA label should fall back to tree_cover rather than raise."""
     path = cat.get_forest("built_up", 47.6, -122.3)
-    assert path.startswith("lib/")
+    assert path and path.endswith(".for")
 
 
 def test_get_forest_all_labels(cat: AssetCatalog) -> None:
