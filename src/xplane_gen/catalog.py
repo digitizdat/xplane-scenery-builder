@@ -89,21 +89,24 @@ class AssetCatalog:
         return "temperate"
 
     def validate_catalog(self, xplane_path: Path) -> None:
-        """Check that all virtual paths exist under xplane_path/Resources/default scenery/."""
+        """Check that all virtual paths resolve in X-Plane's library system."""
         lib_root = xplane_path / "Resources" / "default scenery"
+        exports = _parse_library_exports(lib_root)
+        direct_for = {f.name for f in (lib_root / "900 forests").glob("*.for")}
+
         ok = True
         for btype, sizes in self._facades.items():
             for size, vpath in sizes.items():
-                full = lib_root / vpath
-                status = "✓" if full.exists() else "✗"
-                if not full.exists():
+                found = vpath in exports
+                status = "✓" if found else "✗"
+                if not found:
                     ok = False
                 console.print(f"  [{status}] facades/{btype}/{size}: {vpath}")
         for label, zones in self._forests.items():
             for zone, vpath in zones.items():
-                full = lib_root / vpath
-                status = "✓" if full.exists() else "✗"
-                if not full.exists():
+                found = vpath in exports or vpath in direct_for
+                status = "✓" if found else "✗"
+                if not found:
                     ok = False
                 console.print(f"  [{status}] forests/{label}/{zone}: {vpath}")
         if ok:
@@ -112,6 +115,21 @@ class AssetCatalog:
             console.print(
                 "[yellow]Some entries not found — paths may differ by X-Plane version.[/yellow]"
             )
+
+
+def _parse_library_exports(lib_root: Path) -> set[str]:
+    """Parse all library.txt files and return the set of exported virtual paths."""
+    exports: set[str] = set()
+    for lib_txt in lib_root.rglob("library.txt"):
+        for line in lib_txt.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if not line.startswith("EXPORT"):
+                continue
+            parts = line.split()
+            for part in parts[1:]:
+                if "/" in part and (part.endswith(".for") or part.endswith(".fac")):
+                    exports.add(part)
+                    break
+    return exports
 
 
 def _size_bucket(area_m2: float) -> str:

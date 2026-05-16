@@ -117,3 +117,80 @@ def test_all_forest_entries_non_empty(cat: AssetCatalog) -> None:
     for label, zones in cat._forests.items():
         for zone, vpath in zones.items():
             assert vpath, f"Empty path for forests/{label}/{zone}"
+
+
+# ── X-Plane library validation ────────────────────────────────────────────────
+
+# Change this to match your local X-Plane 12 installation path.
+XPLANE_PATH = "/Users/martin/Library/Application Support/Steam/steamapps/common/X-Plane 12"
+
+
+def _find_library_exports(xplane_path: str) -> set[str]:
+    """Parse all library.txt files and return the set of exported virtual paths."""
+    from pathlib import Path
+
+    exports: set[str] = set()
+    root = Path(xplane_path) / "Resources" / "default scenery"
+    for lib_txt in root.rglob("library.txt"):
+        for line in lib_txt.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if not line.startswith("EXPORT"):
+                continue
+            parts = line.split()
+            # EXPORT <vpath> <realpath>
+            # EXPORT_SEASON <season> <vpath> <realpath>
+            # EXPORT_EXCLUDE <vpath> <realpath>
+            # EXPORT_EXCLUDE_SEASON <season> <vpath> <realpath>
+            for part in parts[1:]:
+                if "/" in part and (part.endswith(".for") or part.endswith(".fac")):
+                    exports.add(part)
+                    break
+    return exports
+
+
+def _find_direct_files(xplane_path: str) -> set[str]:
+    """Find .for/.fac files that X-Plane loads directly (no library.txt needed)."""
+    from pathlib import Path
+
+    root = Path(xplane_path) / "Resources" / "default scenery" / "900 forests"
+    return {f.name for f in root.glob("*.for")} if root.exists() else set()
+
+
+@pytest.mark.xplane
+def test_all_catalog_forests_resolve(cat: AssetCatalog) -> None:
+    """Every .for path in catalog.yaml must resolve in X-Plane 12's library."""
+    from pathlib import Path
+
+    if not Path(XPLANE_PATH).exists():
+        pytest.skip(f"X-Plane not found at {XPLANE_PATH}")
+
+    exports = _find_library_exports(XPLANE_PATH)
+    direct = _find_direct_files(XPLANE_PATH)
+    missing = []
+
+    for label, zones in cat._forests.items():
+        for zone, vpath in zones.items():
+            if vpath in exports or vpath in direct:
+                continue
+            missing.append(f"forests/{label}/{zone}: {vpath}")
+
+    assert not missing, f"Unresolved forest paths:\n" + "\n".join(missing)
+
+
+@pytest.mark.xplane
+def test_all_catalog_facades_resolve(cat: AssetCatalog) -> None:
+    """Every .fac path in catalog.yaml must resolve in X-Plane 12's library."""
+    from pathlib import Path
+
+    if not Path(XPLANE_PATH).exists():
+        pytest.skip(f"X-Plane not found at {XPLANE_PATH}")
+
+    exports = _find_library_exports(XPLANE_PATH)
+    missing = []
+
+    for btype, sizes in cat._facades.items():
+        for size, vpath in sizes.items():
+            if vpath in exports:
+                continue
+            missing.append(f"facades/{btype}/{size}: {vpath}")
+
+    assert not missing, f"Unresolved facade paths:\n" + "\n".join(missing)
