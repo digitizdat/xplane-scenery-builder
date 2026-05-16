@@ -82,7 +82,7 @@ def test_get_facade_all_osm_types(cat: AssetCatalog) -> None:
 
 def test_get_forest_tree_cover_temperate(cat: AssetCatalog) -> None:
     path = cat.get_forest("tree_cover", 47.6, -122.3)
-    assert "decid" in path or "evgr" in path or "tropical" in path or "broadleaf" in path or "conifer" in path
+    assert any(k in path for k in ("decid", "evgr", "tropical", "broadleaf", "conifer"))
 
 
 def test_get_forest_tropical(cat: AssetCatalog) -> None:
@@ -173,7 +173,7 @@ def test_all_catalog_forests_resolve(cat: AssetCatalog) -> None:
                 continue
             missing.append(f"forests/{label}/{zone}: {vpath}")
 
-    assert not missing, f"Unresolved forest paths:\n" + "\n".join(missing)
+    assert not missing, "Unresolved forest paths:\n" + "\n".join(missing)
 
 
 @pytest.mark.xplane
@@ -193,4 +193,4 @@ def test_all_catalog_facades_resolve(cat: AssetCatalog) -> None:
                 continue
             missing.append(f"facades/{btype}/{size}: {vpath}")
 
-    assert not missing, f"Unresolved facade paths:\n" + "\n".join(missing)
+    assert not missing, "Unresolved facade paths:\n" + "\n".join(missing)
