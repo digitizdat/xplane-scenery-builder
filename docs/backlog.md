@@ -105,3 +105,28 @@ Start with PNG; add optional DDS conversion behind a `--dds` flag later.
 - [ ] `--no-ortho` flag allows skipping the stage
 - [ ] Existing tests continue to pass; new unit tests cover tile grid math and `.pol`
   generation
+
+---
+
+## ROAD-001 — Improve road classification granularity
+
+**Status**: Proposed  
+**Priority**: Medium  
+**Source**: HITL review session — Green Bank tile
+
+### Problem
+
+The road classifier defaults to "asphalt, 2 lanes" for most roads. In rural
+areas like Green Bank WV, many roads are narrow 1-lane paved or gravel roads.
+The review UI only allows changing surface type, not lane count.
+
+### Improvements needed
+
+1. **Better prompt context**: Include OSM `highway` class in the prompt with
+   rural road heuristics (e.g. `highway=residential` + rural area → likely
+   1 lane, possibly gravel)
+2. **Review UI**: Allow editing lane count during HITL review, not just surface
+3. **Width classification**: Add a `width` field (narrow/standard/wide) that
+   maps more directly to X-Plane road rendering widths
+4. **Road network rendering**: Actually place roads in the DSF using `.net`
+   definitions with correct widths based on classification
