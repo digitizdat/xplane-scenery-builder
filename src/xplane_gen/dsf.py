@@ -179,13 +179,13 @@ class DsfWriter:
         base_idx = len(forest_resources) + len(facade_resources)
         for dp in self.draped:
             idx = base_idx + draped_resources.index(dp.resource)
+            dp_coords = list(dp.coords)
+            if dp_coords and dp_coords[0] != dp_coords[-1]:
+                dp_coords.append(dp_coords[0])  # close the ring
             lines += [
-                f"BEGIN_POLYGON {idx} 0 4",
+                f"BEGIN_POLYGON {idx} 1 4",
                 "BEGIN_WINDING",
-                *[
-                    f"POLYGON_POINT {lon:.7f} {lat:.7f} {s:.6f} {t:.6f}"
-                    for lon, lat, s, t in dp.coords
-                ],
+                *[f"POLYGON_POINT {c[0]:.7f} {c[1]:.7f} {c[2]:.6f} {c[3]:.6f}" for c in dp_coords],
                 "END_WINDING",
                 "END_POLYGON",
             ]
