@@ -183,7 +183,7 @@ class DsfWriter:
             if dp_coords and dp_coords[0] != dp_coords[-1]:
                 dp_coords.append(dp_coords[0])  # close the ring
             lines += [
-                f"BEGIN_POLYGON {idx} 1 4",
+                f"BEGIN_POLYGON {idx} 65535 4",
                 "BEGIN_WINDING",
                 *[f"POLYGON_POINT {c[0]:.7f} {c[1]:.7f} {c[2]:.6f} {c[3]:.6f}" for c in dp_coords],
                 "END_WINDING",
@@ -284,35 +284,36 @@ def build_overlay(
     ortho_dir = output_dir / "orthophoto"
     if ortho_dir.exists():
         for pol_file in sorted(ortho_dir.glob("*.pol")):
-            # Parse LOAD_CENTER from .pol to get tile bounds
             pol_text = pol_file.read_text(encoding="utf-8")
+            clat = clon = w_m = h_m = 0.0
             for line in pol_text.splitlines():
-                if line.startswith("LOAD_CENTER"):
+                if line.startswith("SCALE"):
                     parts = line.split()
-                    if len(parts) >= 5:
+                    if len(parts) >= 3:
+                        w_m, h_m = float(parts[1]), float(parts[2])
+                elif line.startswith("LOAD_CENTER"):
+                    parts = line.split()
+                    if len(parts) >= 3:
                         clat, clon = float(parts[1]), float(parts[2])
-                        h_m, w_m = float(parts[3]), float(parts[4])
-                        h_deg = h_m / 111_320.0
-                        w_deg = w_m / (111_320.0 * math.cos(math.radians(clat)))
-                        # Corner coordinates with UV mapping
-                        s_lon = clon - w_deg / 2
-                        n_lon = clon + w_deg / 2
-                        s_lat = clat - h_deg / 2
-                        n_lat = clat + h_deg / 2
-                        # Relative path from scenery root to .pol
-                        rel_pol = f"orthophoto/{pol_file.name}"
-                        writer.add_draped(
-                            DrapedPolygon(
-                                resource=rel_pol,
-                                coords=[
-                                    (s_lon, s_lat, 0.0, 0.0),
-                                    (n_lon, s_lat, 1.0, 0.0),
-                                    (n_lon, n_lat, 1.0, 1.0),
-                                    (s_lon, n_lat, 0.0, 1.0),
-                                ],
-                            )
-                        )
-                    break
+            if w_m > 0 and h_m > 0:
+                h_deg = h_m / 111_320.0
+                w_deg = w_m / (111_320.0 * math.cos(math.radians(clat)))
+                s_lon = clon - w_deg / 2
+                n_lon = clon + w_deg / 2
+                s_lat = clat - h_deg / 2
+                n_lat = clat + h_deg / 2
+                rel_pol = f"orthophoto/{pol_file.name}"
+                writer.add_draped(
+                    DrapedPolygon(
+                        resource=rel_pol,
+                        coords=[
+                            (s_lon, s_lat, 0.0, 0.0),
+                            (n_lon, s_lat, 1.0, 0.0),
+                            (n_lon, n_lat, 1.0, 1.0),
+                            (s_lon, n_lat, 0.0, 1.0),
+                        ],
+                    )
+                )
 
     if dry_run:
         text_path = output_dir / "overlay_preview.txt"

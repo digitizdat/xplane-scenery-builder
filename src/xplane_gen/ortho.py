@@ -264,7 +264,6 @@ def _write_pol(
         "A\n"
         "850\n"
         "DRAPED_POLYGON\n"
-        "DECAL_LIB lib/g10/decals/grasses_combo.dcl\n"
         "\n"
         f"TEXTURE_NOWRAP {texture_name}\n"
         f"SCALE {w_m:.1f} {h_m:.1f}\n"
