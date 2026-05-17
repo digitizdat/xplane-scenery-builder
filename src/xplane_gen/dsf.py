@@ -145,7 +145,7 @@ class DsfWriter:
             idx = forest_resources.index(feat.resource)
             coords = _ensure_ccw(feat.coords)
             lines += [
-                f"BEGIN_POLYGON {idx} {feat.density:.4f} 2",
+                f"BEGIN_POLYGON {idx} {int(feat.density * 255)} 2",
                 "BEGIN_WINDING",
                 *[f"POLYGON_POINT {lon:.7f} {lat:.7f}" for lon, lat in coords],
                 "END_WINDING",
@@ -156,7 +156,7 @@ class DsfWriter:
             idx = len(forest_resources) + facade_resources.index(facade.resource)
             coords = _ensure_ccw(facade.coords)
             lines += [
-                f"BEGIN_POLYGON {idx} {facade.height:.2f} 2",
+                f"BEGIN_POLYGON {idx} {int(facade.height)} 2",
                 "BEGIN_WINDING",
                 *[f"POLYGON_POINT {lon:.7f} {lat:.7f}" for lon, lat in coords],
                 "END_WINDING",
@@ -229,8 +229,8 @@ def build_overlay(
             coords = _geom_to_coords(geom)
             if not coords or not label:
                 continue
-            # Skip non-vegetated classes
-            if label in {"built_up", "bare", "snow_ice", "water"}:
+            # Skip classes that shouldn't render as tree polygons
+            if label in {"built_up", "bare", "snow_ice", "water", "cropland", "grassland"}:
                 continue
             for_path = catalog.get_forest(label, tile_centre_lat, west + 0.5)
             if not for_path:
