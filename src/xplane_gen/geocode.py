@@ -18,7 +18,8 @@ def placename_to_bbox(placename: str) -> tuple[float, float, float, float]:
         f"q={urllib.parse.quote(placename)}&format=json&limit=1"
     )
     req = urllib.request.Request(url, headers={"User-Agent": "xplane-scenery-builder/1.0"})
-    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310 — URL is https with controlled query params
+    # nosemgrep: dynamic-urllib-use-detected
+    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
         data = json.loads(resp.read())
 
     if not data:

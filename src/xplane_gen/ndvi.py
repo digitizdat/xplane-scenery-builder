@@ -3,6 +3,8 @@
 Fetches the least-cloudy Sentinel-2 L2A scene within a 90-day window
 from s3://sentinel-cogs/ via STAC, computes NDVI, and annotates each
 forest polygon in a landcover GeoJSON with an ndvi_density value.
+
+Large bboxes are processed in tiles to avoid OOM.
 """
 
 from __future__ import annotations
@@ -14,8 +16,8 @@ from typing import Any
 
 import numpy as np
 import rasterio
-import rasterio.mask
 from rasterio.crs import CRS
+from rasterio.features import geometry_mask
 from rasterio.warp import transform_bounds
 
 _STAC_URL = "https://earth-search.aws.element84.com/v1"
@@ -31,6 +33,9 @@ _DENSITY_MAX = 1.0
 
 # SCL (Scene Classification Layer) values to mask as cloud/shadow
 _CLOUD_SCL = {8, 9, 10}  # cloud medium, cloud high, thin cirrus
+
+# Maximum tile size in degrees for chunked processing
+_TILE_DEG = 0.15
 
 
 def annotate_forest_density(
@@ -57,19 +62,61 @@ def annotate_forest_density(
     if not vegetated:
         return landcover_geojson
 
-    ndvi = _fetch_ndvi(lat_min, lon_min, lat_max, lon_max)
-    if ndvi is None:
-        # No usable scene found — leave default density
-        return landcover_geojson
+    # Process in tiles to limit memory
+    from shapely.geometry import box, shape
 
-    ndvi_raster, ndvi_transform, ndvi_crs = ndvi
+    tiles = _make_tiles(lat_min, lon_min, lat_max, lon_max)
 
-    for feat in vegetated:
-        density = _mean_ndvi_for_polygon(feat["geometry"], ndvi_raster, ndvi_transform, ndvi_crs)
-        feat["properties"]["ndvi_density"] = round(density, 3)
+    for tile_bbox in tiles:
+        t_lat_min, t_lon_min, t_lat_max, t_lon_max = tile_bbox
+        tile_box = box(t_lon_min, t_lat_min, t_lon_max, t_lat_max)
+
+        # Find polygons intersecting this tile
+        tile_feats = []
+        for f in vegetated:
+            if f["properties"].get("ndvi_density") is not None:
+                continue  # already annotated
+            geom = shape(f["geometry"])
+            if geom.intersects(tile_box):
+                tile_feats.append(f)
+
+        if not tile_feats:
+            continue
+
+        ndvi_result = _fetch_ndvi(t_lat_min, t_lon_min, t_lat_max, t_lon_max)
+        if ndvi_result is None:
+            continue
+
+        ndvi_raster, ndvi_transform, ndvi_crs = ndvi_result
+
+        for feat in tile_feats:
+            density = _mean_ndvi_for_polygon(
+                feat["geometry"], ndvi_raster, ndvi_transform, ndvi_crs
+            )
+            feat["properties"]["ndvi_density"] = round(density, 3)
+
+        # Free raster memory between tiles
+        del ndvi_raster, ndvi_result
 
     landcover_geojson.write_text(json.dumps(fc, indent=2), encoding="utf-8")
     return landcover_geojson
+
+
+def _make_tiles(
+    lat_min: float, lon_min: float, lat_max: float, lon_max: float
+) -> list[tuple[float, float, float, float]]:
+    """Split bbox into tiles of at most _TILE_DEG on each side."""
+    tiles: list[tuple[float, float, float, float]] = []
+    lat = lat_min
+    while lat < lat_max:
+        lon = lon_min
+        lat_end = min(lat + _TILE_DEG, lat_max)
+        while lon < lon_max:
+            lon_end = min(lon + _TILE_DEG, lon_max)
+            tiles.append((lat, lon, lat_end, lon_end))
+            lon = lon_end
+        lat = lat_end
+    return tiles
 
 
 def _fetch_ndvi(
@@ -120,7 +167,6 @@ def _fetch_ndvi(
         red = src_red.read(1, window=window).astype(np.float32)
         transform = src_red.window_transform(window)
 
-        # Resample NIR to same window/shape if needed
         nir = src_nir.read(1, window=window, out_shape=red.shape).astype(np.float32)
 
         # Mask clouds using SCL band if available
@@ -130,11 +176,13 @@ def _fetch_ndvi(
             cloud_mask = np.isin(scl, list(_CLOUD_SCL))
             red[cloud_mask] = np.nan
             nir[cloud_mask] = np.nan
+            del scl, cloud_mask
 
     denom = nir + red
     with np.errstate(invalid="ignore", divide="ignore"):
         ndvi = np.where(denom != 0, (nir - red) / denom, np.nan)
 
+    del red, nir, denom
     return ndvi, transform, crs
 
 
@@ -157,41 +205,22 @@ def _mean_ndvi_for_polygon(
         geom = shp_transform(project, geom)
 
     try:
-        masked, _ = rasterio.mask.mask(
-            _ndvi_as_dataset(ndvi, transform, crs),
+        # Use geometry_mask directly on the ndvi array — no MemoryFile copy
+        mask = geometry_mask(
             [mapping(geom)],
-            crop=True,
-            nodata=np.nan,
+            out_shape=ndvi.shape,
+            transform=transform,
+            invert=True,
         )
-        values = masked[0]
+        values = ndvi[mask]
         valid = values[~np.isnan(values)]
         if valid.size == 0:
-            return 0.7  # default
+            return 0.7
         mean_ndvi = float(np.mean(valid))
     except Exception:
         return 0.7
 
     return _ndvi_to_density(mean_ndvi)
-
-
-def _ndvi_as_dataset(ndvi: np.ndarray, transform: Any, crs: CRS) -> rasterio.DatasetReader:
-    """Wrap an ndvi array in an in-memory rasterio dataset."""
-    import rasterio.io
-
-    mem = rasterio.io.MemoryFile()
-    with rasterio.open(
-        mem,
-        "w",
-        driver="GTiff",
-        height=ndvi.shape[0],
-        width=ndvi.shape[1],
-        count=1,
-        dtype=np.float32,
-        crs=crs,
-        transform=transform,
-    ) as dst:
-        dst.write(ndvi.astype(np.float32), 1)
-    return mem.open()
 
 
 def _ndvi_to_density(ndvi: float) -> float:
