@@ -245,16 +245,21 @@ def _write_pol(
     lon_max: float,
 ) -> None:
     """Write an X-Plane draped polygon (.pol) descriptor."""
+    import math
+
+    centre_lat = (lat_min + lat_max) / 2
+    h_m = _deg_to_m(lat_max - lat_min)
+    w_m = _deg_to_m(lon_max - lon_min) * math.cos(math.radians(centre_lat))
     path.write_text(
         "A\n"
         "850\n"
         "DRAPED_POLYGON\n"
         "\n"
-        f"TEXTURE ../orthophoto/{texture_name}\n"
-        "TEXTURE_NOWRAP\n"
-        "SCALE 1 1\n"
-        f"LOAD_CENTER {(lat_min + lat_max) / 2:.6f} {(lon_min + lon_max) / 2:.6f} "
-        f"{_deg_to_m(lat_max - lat_min):.0f} {_deg_to_m(lon_max - lon_min):.0f}\n",
+        f"TEXTURE_NOWRAP {texture_name}\n"
+        f"SCALE {w_m:.1f} {h_m:.1f}\n"
+        f"LOAD_CENTER {centre_lat:.6f} {(lon_min + lon_max) / 2:.6f} "
+        f"{max(h_m, w_m):.0f} 2048\n"
+        "LAYER_GROUP TERRAIN 1\n",
         encoding="utf-8",
     )
 

@@ -61,6 +61,12 @@ class ExclusionZone:
 
 
 @dataclass
+class DrapedPolygon:
+    resource: str  # path to .pol file
+    coords: list[tuple[float, float, float, float]]  # (lon, lat, s, t) per vertex
+
+
+@dataclass
 class DsfWriter:
     """Builds a DSF overlay text file and compiles it with DSFTool."""
 
@@ -68,10 +74,14 @@ class DsfWriter:
     tile_south: int
     forests: list[ForestFeature] = field(default_factory=list)
     facades: list[FacadeFeature] = field(default_factory=list)
+    draped: list[DrapedPolygon] = field(default_factory=list)
     exclusions: list[ExclusionZone] = field(default_factory=list)
 
     def add_forest(self, feature: ForestFeature) -> None:
         self.forests.append(feature)
+
+    def add_draped(self, polygon: DrapedPolygon) -> None:
+        self.draped.append(polygon)
 
     def add_facade(self, feature: FacadeFeature) -> None:
         self.facades.append(feature)
@@ -133,10 +143,13 @@ class DsfWriter:
 
         forest_resources = list(dict.fromkeys(f.resource for f in self.forests))
         facade_resources = list(dict.fromkeys(f.resource for f in self.facades))
+        draped_resources = list(dict.fromkeys(d.resource for d in self.draped))
 
         for r in forest_resources:
             lines.append(f"POLYGON_DEF {r}")
         for r in facade_resources:
+            lines.append(f"POLYGON_DEF {r}")
+        for r in draped_resources:
             lines.append(f"POLYGON_DEF {r}")
 
         lines.append("")
@@ -159,6 +172,20 @@ class DsfWriter:
                 f"BEGIN_POLYGON {idx} {int(facade.height)} 2",
                 "BEGIN_WINDING",
                 *[f"POLYGON_POINT {lon:.7f} {lat:.7f}" for lon, lat in coords],
+                "END_WINDING",
+                "END_POLYGON",
+            ]
+
+        base_idx = len(forest_resources) + len(facade_resources)
+        for dp in self.draped:
+            idx = base_idx + draped_resources.index(dp.resource)
+            lines += [
+                f"BEGIN_POLYGON {idx} 0 4",
+                "BEGIN_WINDING",
+                *[
+                    f"POLYGON_POINT {lon:.7f} {lat:.7f} {s:.6f} {t:.6f}"
+                    for lon, lat, s, t in dp.coords
+                ],
                 "END_WINDING",
                 "END_POLYGON",
             ]
@@ -252,6 +279,38 @@ def build_overlay(
     # ── forest exclusion zone ─────────────────────────────────────────
     if has_forests:
         writer.add_exclusion(ExclusionZone("for", west, south, east, north))
+
+    # ── orthophoto draped polygons ────────────────────────────────────
+    ortho_dir = output_dir / "orthophoto"
+    if ortho_dir.exists():
+        for pol_file in sorted(ortho_dir.glob("*.pol")):
+            # Parse LOAD_CENTER from .pol to get tile bounds
+            pol_text = pol_file.read_text(encoding="utf-8")
+            for line in pol_text.splitlines():
+                if line.startswith("LOAD_CENTER"):
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        clat, clon = float(parts[1]), float(parts[2])
+                        h_m, w_m = float(parts[3]), float(parts[4])
+                        h_deg = h_m / 111_320.0
+                        w_deg = w_m / (111_320.0 * math.cos(math.radians(clat)))
+                        # Corner coordinates with UV mapping
+                        s_lon = clon - w_deg / 2
+                        n_lon = clon + w_deg / 2
+                        s_lat = clat - h_deg / 2
+                        n_lat = clat + h_deg / 2
+                        # Relative path from scenery root to .pol
+                        rel_pol = f"orthophoto/{pol_file.name}"
+                        writer.add_draped(DrapedPolygon(
+                            resource=rel_pol,
+                            coords=[
+                                (s_lon, s_lat, 0.0, 0.0),
+                                (n_lon, s_lat, 1.0, 0.0),
+                                (n_lon, n_lat, 1.0, 1.0),
+                                (s_lon, n_lat, 0.0, 1.0),
+                            ],
+                        ))
+                    break
 
     if dry_run:
         text_path = output_dir / "overlay_preview.txt"

@@ -76,10 +76,9 @@ def test_write_pol_content(tmp_path: Path) -> None:
     _write_pol(pol, "tile.png", 38.40, -79.90, 38.42, -79.88)
     text = pol.read_text()
     assert "DRAPED_POLYGON" in text
-    assert "TEXTURE ../orthophoto/tile.png" in text
-    assert "TEXTURE_NOWRAP" in text
+    assert "TEXTURE_NOWRAP tile.png" in text
     assert "LOAD_CENTER" in text
-    # Centre lat should be midpoint
+    assert "LAYER_GROUP TERRAIN 1" in text
     assert "38.41" in text
 
 
