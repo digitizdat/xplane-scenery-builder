@@ -74,7 +74,8 @@ def classify_land(bbox: str, output: str) -> None:
 
 
 @cli.command("generate")
-@click.option("--bbox", required=True, help="lat_min,lon_min,lat_max,lon_max")
+@click.option("--bbox", default=None, help="lat_min,lon_min,lat_max,lon_max")
+@click.option("--placename", default=None, help="Place name to geocode (e.g. 'Green Bank, WV').")
 @click.option("--output", default="./output", show_default=True)
 @click.option("--dry-run", is_flag=True)
 @click.option("--auto", is_flag=True, help="Skip human review, use best-guess.")
@@ -89,7 +90,8 @@ def classify_land(bbox: str, output: str) -> None:
 @click.option("--review-all", is_flag=True, help="Force human review of all LLM classifications.")
 @click.option("--no-roads", is_flag=True, help="Suppress default road network in ortho areas.")
 def generate(
-    bbox: str,
+    bbox: str | None,
+    placename: str | None,
     output: str,
     dry_run: bool,
     auto: bool,
@@ -104,7 +106,22 @@ def generate(
 
     from xplane_gen.pipeline import TileProcessor
 
-    lat_min, lon_min, lat_max, lon_max = map(float, bbox.split(","))
+    if bbox and placename:
+        raise click.UsageError("--bbox and --placename are mutually exclusive.")
+    if not bbox and not placename:
+        raise click.UsageError("Either --bbox or --placename is required.")
+
+    if placename:
+        from xplane_gen.geocode import placename_to_bbox
+
+        lat_min, lon_min, lat_max, lon_max = placename_to_bbox(placename)
+        console.print(
+            f"[cyan]Geocoded[/cyan] {placename!r} → "
+            f"{lat_min:.4f},{lon_min:.4f},{lat_max:.4f},{lon_max:.4f}"
+        )
+    else:
+        lat_min, lon_min, lat_max, lon_max = map(float, bbox.split(","))  # type: ignore[union-attr]
+
     proc = TileProcessor(
         lat_min,
         lon_min,
