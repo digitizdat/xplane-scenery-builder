@@ -25,7 +25,74 @@
 
 ---
 
-## ROAD-001 — Improve road classification granularity
+## ROAD-002 — Suppress default road network in ortho-covered areas
+
+**Status**: Proposed  
+**Priority**: High  
+**Source**: Visual conflict between rendered roads and ortho imagery roads
+
+### Problem
+
+X-Plane renders its default road network on top of our orthophoto tiles. The
+default roads don't align with the actual roads visible in the aerial imagery,
+creating a confusing criss-cross pattern.
+
+### Solution
+
+Add `sim/exclude_net` property to the DSF when orthophoto tiles are present.
+This suppresses X-Plane's default road rendering in the tile, letting the
+roads in the aerial imagery serve as the visual ground truth.
+
+### Implementation
+
+1. Add `--no-roads` CLI flag (suppress road network in ortho areas)
+2. When ortho tiles exist and flag is set, emit `sim/exclude_net west/south/east/north`
+3. Scope exclusion to the ortho-covered bbox (not the full 1° tile)
+
+### Tradeoffs
+
+- Roads in ortho areas won't have 3D traffic or physics surfaces
+- Acceptable for visual scenery overlays
+
+---
+
+## ROAD-003 — Align OSM road vectors to orthophoto imagery
+
+**Status**: Proposed  
+**Priority**: Medium  
+**Source**: Visual conflict between rendered roads and ortho imagery roads
+
+### Problem
+
+OSM road vectors and satellite/aerial imagery often have 2-5m systematic
+offsets that vary by region. When both are rendered, roads appear doubled
+or misaligned.
+
+### Approach
+
+1. **Detect offset**: Use image correlation or feature matching between
+   OSM road centrelines and road pixels in the ortho imagery
+2. **Compute affine transform**: Find the translation (and optionally
+   rotation/scale) that best aligns OSM roads to the imagery
+3. **Apply correction**: Shift road geometries before DSF compilation
+4. **Render aligned roads**: Place corrected road network on top of ortho
+
+### CLI flag
+
+`--align-roads` — enable road vector alignment to ortho imagery
+
+### Dependencies
+
+- Orthophoto tiles (ORTHO-001) ✅
+- Road classification (ROAD-001)
+- Image processing for road detection (OpenCV or similar)
+
+### Complexity
+
+High — requires computer vision for road pixel detection and robust
+geometric alignment. May need manual calibration points as fallback.
+
+---
 
 **Status**: Proposed  
 **Priority**: Medium  

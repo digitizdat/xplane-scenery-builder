@@ -75,12 +75,14 @@ fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review
 - Tile bounds must be computed from SCALE (w_m, h_m) + LOAD_CENTER (clat, clon), not from LOAD_CENTER radius field
 
 ### Backlog priorities
-1. **CLASSIFY-001** (High): Reduce LLM escalation rate — lower thresholds, enrich prompts
-2. **RENDER-001** (High): Some buildings not rendering — investigate specific failures
-3. **ROAD-001** (Medium): Road classification granularity — lane count, width
-4. **HEIGHT-001** (Medium): Shadow-based building height from NAIP + sun angle
-5. **DDS-001** (Low): DDS compression for ortho tiles
-6. **ASSET-001** (Low): Expanded asset placement (FR-8 through FR-18)
+1. **ROAD-002** (High): Suppress default road network in ortho areas (`--no-roads`)
+2. **ROAD-003** (Medium): Align OSM road vectors to ortho imagery (`--align-roads`)
+3. **CLASSIFY-001** (High): Reduce LLM escalation rate — lower thresholds, enrich prompts
+4. **RENDER-001** (High): Some buildings not rendering — investigate specific failures
+5. **ROAD-001** (Medium): Road classification granularity — lane count, width
+6. **HEIGHT-001** (Medium): Shadow-based building height from NAIP + sun angle
+7. **DDS-001** (Low): DDS compression for ortho tiles
+8. **ASSET-001** (Low): Expanded asset placement (FR-8 through FR-18)
 
 ### Workflow Notes
 - `--regen` preserves fetch stages + annotate + classify + review; re-runs write_dsf + validate
