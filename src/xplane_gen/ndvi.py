@@ -172,7 +172,8 @@ def _fetch_ndvi(
         # Mask clouds using SCL band if available
         if "scl" in item.assets:
             with rasterio.open(item.assets["scl"].href) as src_scl:
-                scl = src_scl.read(1, window=window, out_shape=red.shape)
+                scl_window = src_scl.window(west, south, east, north)
+                scl = src_scl.read(1, window=scl_window, out_shape=red.shape)
             cloud_mask = np.isin(scl, list(_CLOUD_SCL))
             red[cloud_mask] = np.nan
             nir[cloud_mask] = np.nan
