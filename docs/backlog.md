@@ -117,6 +117,36 @@ The review UI only allows changing surface type, not lane count.
 
 ---
 
+## ALIGN-001 — Building footprints offset from orthophoto imagery
+
+**Status**: Proposed  
+**Priority**: Medium  
+**Source**: Visual inspection of Green Bank tile with --no-roads
+
+### Problem
+
+OSM building footprints are offset from the actual buildings visible in the
+orthophoto imagery by several meters in some places. This is a known issue
+with OSM data — coordinates are traced from different imagery sources with
+varying georeferencing accuracy.
+
+### Possible approaches
+
+1. **Global affine correction**: Compute a single translation offset for the
+   tile by correlating OSM building centroids with detected building pixels
+   in the ortho imagery (similar to ROAD-003 approach)
+2. **Per-building snap**: For each building footprint, search a small radius
+   in the ortho for the best-matching building outline and shift to align
+3. **Accept and document**: The offset is small (2-5m) and may not justify
+   the implementation complexity
+
+### Dependencies
+
+- Orthophoto tiles (ORTHO-001) ✅
+- Image processing for building detection (OpenCV or LLM vision)
+
+---
+
 ## HEIGHT-001 — Shadow-based building height estimation
 
 **Status**: Proposed  
