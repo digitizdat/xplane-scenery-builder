@@ -119,7 +119,9 @@ def _review_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _show_item(item: dict[str, Any], index: int, total: int) -> None:
     result = item.get("result", item)
     tool = item.get("tool", "classify_building")
+    item_id = item.get("id", "?")
     table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_row("[dim]ID[/dim]", str(item_id))
     table.add_row("[dim]Type[/dim]", tool)
     table.add_row("[dim]Confidence[/dim]", f"{result.get('confidence', 0):.0%}")
     guess = (

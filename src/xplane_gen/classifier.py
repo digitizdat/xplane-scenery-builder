@@ -204,8 +204,10 @@ class BedrockClassifier:
         self._save_cache(cache_key, result)
 
         if self._review_all or result.get("confidence", 0) < _REVIEW_THRESHOLD:
+            item_id = hashlib.sha256(image_b64.encode()).hexdigest()[:8]
             self._review_queue.append(
                 {
+                    "id": item_id,
                     "tool": tool_name,
                     "result": result,
                     "prompt": prompt,
