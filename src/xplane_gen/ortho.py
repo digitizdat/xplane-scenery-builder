@@ -233,7 +233,12 @@ def _tile_grid(
 def _write_png(rgb: np.ndarray, path: Path) -> None:
     from PIL import Image
 
-    Image.fromarray(rgb.astype(np.uint8)).save(path)
+    img = Image.fromarray(rgb.astype(np.uint8))
+    # X-Plane requires power-of-2 texture dimensions; round down per axis
+    w = 1 << (img.width.bit_length() - 1)
+    h = 1 << (img.height.bit_length() - 1)
+    img = img.resize((w, h), Image.Resampling.LANCZOS)
+    img.save(path)
 
 
 def _write_pol(
