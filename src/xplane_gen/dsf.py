@@ -120,6 +120,8 @@ class DsfWriter:
             f"PROPERTY sim/north {self.tile_south + 1}",
             "PROPERTY sim/planet earth",
             "PROPERTY sim/overlay 1",
+            "PROPERTY sim/require_facade 1/0",
+            "PROPERTY sim/require_object 1/0",
         ]
 
         for ex in self.exclusions:
