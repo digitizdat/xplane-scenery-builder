@@ -87,7 +87,7 @@ def test_write_pol_content(tmp_path: Path) -> None:
 # ------------------------------------------------------------------ #
 
 
-def _make_rgb(h: int = 4, w: int = 4) -> np.ndarray:
+def _make_rgb(h: int = 512, w: int = 512) -> np.ndarray:
     return np.zeros((h, w, 3), dtype=np.uint8)
 
 

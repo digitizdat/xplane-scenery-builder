@@ -202,6 +202,8 @@ def fetch_ortho_tiles(
             continue
 
         _write_png(rgb, png_path)
+        if not png_path.exists():
+            continue  # sliver too small, skipped
         _write_pol(pol_path, png_path.name, t_lat_min, t_lon_min, t_lat_max, t_lon_max)
         pol_paths.append(pol_path)
 
@@ -237,6 +239,9 @@ def _write_png(rgb: np.ndarray, path: Path) -> None:
     # X-Plane requires power-of-2 texture dimensions; round down per axis
     w = 1 << (img.width.bit_length() - 1)
     h = 1 << (img.height.bit_length() - 1)
+    # Skip slivers that are too small to be useful
+    if w < 256 or h < 256:
+        return
     img = img.resize((w, h), Image.Resampling.LANCZOS)
     img.save(path)
 
