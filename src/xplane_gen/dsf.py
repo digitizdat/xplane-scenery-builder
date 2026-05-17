@@ -301,15 +301,17 @@ def build_overlay(
                         n_lat = clat + h_deg / 2
                         # Relative path from scenery root to .pol
                         rel_pol = f"orthophoto/{pol_file.name}"
-                        writer.add_draped(DrapedPolygon(
-                            resource=rel_pol,
-                            coords=[
-                                (s_lon, s_lat, 0.0, 0.0),
-                                (n_lon, s_lat, 1.0, 0.0),
-                                (n_lon, n_lat, 1.0, 1.0),
-                                (s_lon, n_lat, 0.0, 1.0),
-                            ],
-                        ))
+                        writer.add_draped(
+                            DrapedPolygon(
+                                resource=rel_pol,
+                                coords=[
+                                    (s_lon, s_lat, 0.0, 0.0),
+                                    (n_lon, s_lat, 1.0, 0.0),
+                                    (n_lon, n_lat, 1.0, 1.0),
+                                    (s_lon, n_lat, 0.0, 1.0),
+                                ],
+                            )
+                        )
                     break
 
     if dry_run:
