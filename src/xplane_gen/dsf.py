@@ -224,6 +224,7 @@ def build_overlay(
     output_dir: Path,
     dsftool: Path | None = None,
     dry_run: bool = False,
+    no_roads: bool = False,
 ) -> Path:
     """Build a DSF overlay from classified GeoJSON files.
 
@@ -314,6 +315,10 @@ def build_overlay(
                         ],
                     )
                 )
+
+    # ── road network exclusion ────────────────────────────────────────
+    if no_roads and writer.draped:
+        writer.add_exclusion(ExclusionZone("net", west, south, east, north))
 
     if dry_run:
         text_path = output_dir / "overlay_preview.txt"

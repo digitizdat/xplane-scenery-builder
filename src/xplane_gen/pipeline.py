@@ -41,6 +41,7 @@ class TileProcessor:
         ortho_source: str | None = None,
         regen: bool = False,
         review_all: bool = False,
+        no_roads: bool = False,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -52,6 +53,7 @@ class TileProcessor:
         self.dsftool = dsftool
         self.ortho_source = ortho_source
         self.review_all = review_all
+        self.no_roads = no_roads
 
         # Tile SW corner (integer degrees)
         self.tile_west = int(math.floor(lon_min))
@@ -320,6 +322,7 @@ class TileProcessor:
             self.output_dir,
             dsftool=self.dsftool,
             dry_run=self.dry_run,
+            no_roads=self.no_roads,
         )
 
     def _stage_validate(self) -> None:

@@ -87,6 +87,7 @@ def classify_land(bbox: str, output: str) -> None:
 )
 @click.option("--regen", is_flag=True, help="Regenerate from cached data without re-downloading.")
 @click.option("--review-all", is_flag=True, help="Force human review of all LLM classifications.")
+@click.option("--no-roads", is_flag=True, help="Suppress default road network in ortho areas.")
 def generate(
     bbox: str,
     output: str,
@@ -96,6 +97,7 @@ def generate(
     ortho_source: str | None,
     regen: bool,
     review_all: bool,
+    no_roads: bool,
 ) -> None:
     """Task 8: End-to-end tile generation pipeline."""
     from pathlib import Path
@@ -115,6 +117,7 @@ def generate(
         ortho_source=ortho_source,
         regen=regen,
         review_all=review_all,
+        no_roads=no_roads,
     )
     proc.run()
 
