@@ -252,6 +252,8 @@ def _write_png(rgb: np.ndarray, path: Path) -> None:
     from PIL import Image
 
     img = Image.fromarray(rgb.astype(np.uint8))
+    if img.width == 0 or img.height == 0:
+        return
     # X-Plane requires power-of-2 texture dimensions; round down per axis
     w = 1 << (img.width.bit_length() - 1)
     h = 1 << (img.height.bit_length() - 1)
