@@ -282,7 +282,7 @@ class TileProcessor:
 
         # ── Roads ─────────────────────────────────────────────────────
         roads_path = self.output_dir / "roads.geojson"
-        if roads_path.exists():
+        if roads_path.exists() and not self.no_roads:
             fc = json.loads(roads_path.read_text(encoding="utf-8"))
             roads = [
                 f
