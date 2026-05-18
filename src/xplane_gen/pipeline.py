@@ -42,6 +42,7 @@ class TileProcessor:
         regen: bool = False,
         review_all: bool = False,
         no_roads: bool = False,
+        workers: int = 5,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -54,6 +55,7 @@ class TileProcessor:
         self.ortho_source = ortho_source
         self.review_all = review_all
         self.no_roads = no_roads
+        self.workers = workers
 
         # Tile SW corner (integer degrees)
         self.tile_west = int(math.floor(lon_min))
@@ -160,6 +162,9 @@ class TileProcessor:
         if self.auto:
             return
 
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from xplane_gen.classifier import BedrockClassifier, crop_patch
 
         classifier = BedrockClassifier(
@@ -181,6 +186,18 @@ class TileProcessor:
             patch = crop_patch(self.output_dir, bbox, tile_bbox)
             return patch if patch is not None else dummy
 
+        def _get_road_patch(geom: dict[str, Any]) -> np.ndarray:
+            coords = geom.get("coordinates", [])
+            if coords and isinstance(coords[0], list):
+                flat = coords if isinstance(coords[0][0], (int, float)) else coords[0]
+                lons = [c[0] for c in flat]
+                lats = [c[1] for c in flat]
+                bbox = (min(lons), min(lats), max(lons), max(lats))
+                cropped = crop_patch(self.output_dir, bbox, tile_bbox)
+                if cropped is not None:
+                    return cropped
+            return dummy
+
         # ── Buildings ─────────────────────────────────────────────────
         buildings_path = self.output_dir / "buildings.geojson"
         if buildings_path.exists():
@@ -192,18 +209,32 @@ class TileProcessor:
                 and "xplane_confidence" not in f.get("properties", {})
             ]
             if ambiguous:
-                console.print(f"[cyan]Classifying {len(ambiguous)} buildings…[/cyan]")
-                for i, feat in enumerate(ambiguous, 1):
+                console.print(
+                    f"[cyan]Classifying {len(ambiguous)} buildings ({self.workers} workers)…[/cyan]"
+                )
+                lock = threading.Lock()
+                done = [0]
+
+                def _classify_building(feat: dict[str, Any]) -> None:
                     props = feat.get("properties", {})
                     patch = _get_patch(feat.get("geometry", {}))
-                    console.print(f"[dim]  building {i}/{len(ambiguous)}[/dim]")
                     result = classifier.classify_building(
                         patch, {k: str(v) for k, v in props.items()}
                     )
                     props["xplane_type"] = result["building_type"]
                     props["xplane_height_m"] = result["height_m"]
                     props["xplane_confidence"] = result["confidence"]
-                    buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    with lock:
+                        done[0] += 1
+                        if done[0] % 10 == 0 or done[0] == len(ambiguous):
+                            console.print(f"[dim]  buildings {done[0]}/{len(ambiguous)}[/dim]")
+                            buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+
+                with ThreadPoolExecutor(max_workers=self.workers) as pool:
+                    futures = [pool.submit(_classify_building, f) for f in ambiguous]
+                    for fut in as_completed(futures):
+                        fut.result()  # propagate exceptions
+                buildings_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Forests ───────────────────────────────────────────────────
         landcover_path = self.output_dir / "landcover.geojson"
@@ -216,19 +247,34 @@ class TileProcessor:
                 and "xplane_confidence" not in f.get("properties", {})
             ]
             if forests:
-                console.print(f"[cyan]Classifying {len(forests)} forest polygons…[/cyan]")
-                for i, feat in enumerate(forests, 1):
+                console.print(
+                    f"[cyan]Classifying {len(forests)} forest polygons "
+                    f"({self.workers} workers)…[/cyan]"
+                )
+                lock = threading.Lock()
+                done = [0]
+
+                def _classify_forest(feat: dict[str, Any]) -> None:
                     props = feat.get("properties", {})
                     patch = _get_patch(feat.get("geometry", {}))
                     ndvi = float(props.get("ndvi_density", 0.7))
-                    console.print(f"[dim]  forest {i}/{len(forests)}[/dim]")
                     result = classifier.classify_forest(
                         patch, props.get("label", "tree_cover"), ndvi
                     )
                     props["xplane_species"] = result["species_mix"]
                     props["xplane_density"] = result["canopy_density"]
                     props["xplane_confidence"] = result["confidence"]
-                    landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    with lock:
+                        done[0] += 1
+                        if done[0] % 10 == 0 or done[0] == len(forests):
+                            console.print(f"[dim]  forests {done[0]}/{len(forests)}[/dim]")
+                            landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+
+                with ThreadPoolExecutor(max_workers=self.workers) as pool:
+                    futures = [pool.submit(_classify_forest, f) for f in forests]
+                    for fut in as_completed(futures):
+                        fut.result()
+                landcover_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Roads ─────────────────────────────────────────────────────
         roads_path = self.output_dir / "roads.geojson"
@@ -240,34 +286,30 @@ class TileProcessor:
                 if "xplane_confidence" not in f.get("properties", {})
             ]
             if roads:
-                console.print(f"[cyan]Classifying {len(roads)} road segments…[/cyan]")
-                for i, feat in enumerate(roads, 1):
+                console.print(
+                    f"[cyan]Classifying {len(roads)} road segments ({self.workers} workers)…[/cyan]"
+                )
+                lock = threading.Lock()
+                done = [0]
+
+                def _classify_road(feat: dict[str, Any]) -> None:
                     props = feat.get("properties", {})
-                    geom = feat.get("geometry", {})
-                    console.print(f"[dim]  road {i}/{len(roads)}[/dim]")
-                    # For linestrings, use midpoint bbox
-                    coords = geom.get("coordinates", [])
-                    road_patch = dummy
-                    if coords and isinstance(coords[0], (int, float)):
-                        # Point — skip
-                        pass
-                    elif coords and isinstance(coords[0], list):
-                        # Flatten nested coords (LineString or MultiLineString)
-                        flat = coords if isinstance(coords[0][0], (int, float)) else coords[0]
-                        lons = [c[0] for c in flat]
-                        lats = [c[1] for c in flat]
-                        bbox = (min(lons), min(lats), max(lons), max(lats))
-                        cropped = crop_patch(self.output_dir, bbox, tile_bbox)
-                        if cropped is not None:
-                            road_patch = cropped
-                    result = classifier.classify_road(
-                        road_patch,
-                        {k: str(v) for k, v in props.items()},
-                    )
+                    patch = _get_road_patch(feat.get("geometry", {}))
+                    result = classifier.classify_road(patch, {k: str(v) for k, v in props.items()})
                     props["xplane_surface"] = result["surface_type"]
                     props["xplane_lanes"] = result["lane_count"]
                     props["xplane_confidence"] = result["confidence"]
-                    roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+                    with lock:
+                        done[0] += 1
+                        if done[0] % 10 == 0 or done[0] == len(roads):
+                            console.print(f"[dim]  roads {done[0]}/{len(roads)}[/dim]")
+                            roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+
+                with ThreadPoolExecutor(max_workers=self.workers) as pool:
+                    futures = [pool.submit(_classify_road, f) for f in roads]
+                    for fut in as_completed(futures):
+                        fut.result()
+                roads_path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
 
         # ── Summary ───────────────────────────────────────────────────
         if classifier.review_count > 0:

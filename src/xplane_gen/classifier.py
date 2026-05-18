@@ -107,12 +107,15 @@ class BedrockClassifier:
         region: str = "us-east-1",
         review_all: bool = False,
     ) -> None:
+        import threading
+
         self.output_dir = output_dir
         self._client = boto3.client("bedrock-runtime", region_name=region)
         self._cache_dir = output_dir / ".llm_cache"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._review_queue: list[dict[str, Any]] = []
         self._review_all = review_all
+        self._lock = threading.Lock()
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -205,15 +208,16 @@ class BedrockClassifier:
 
         if self._review_all or result.get("confidence", 0) < _REVIEW_THRESHOLD:
             item_id = hashlib.sha256(image_b64.encode()).hexdigest()[:8]
-            self._review_queue.append(
-                {
-                    "id": item_id,
-                    "tool": tool_name,
-                    "result": result,
-                    "prompt": prompt,
-                    "thumbnail_b64": image_b64,
-                }
-            )
+            with self._lock:
+                self._review_queue.append(
+                    {
+                        "id": item_id,
+                        "tool": tool_name,
+                        "result": result,
+                        "prompt": prompt,
+                        "thumbnail_b64": image_b64,
+                    }
+                )
 
         return result
 
