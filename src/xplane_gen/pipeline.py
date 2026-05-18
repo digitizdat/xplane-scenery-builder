@@ -155,6 +155,7 @@ class TileProcessor:
             self.lon_max,
             str(self.output_dir),
             make_source(self.ortho_source),
+            workers=self.workers,
         )
 
     def _stage_classify(self) -> None:

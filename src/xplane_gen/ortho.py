@@ -171,11 +171,14 @@ def fetch_ortho_tiles(
     lon_max: float,
     output_dir: str,
     source: OrthoSource,
+    workers: int = 8,
 ) -> list[Path]:
     """Fetch orthophoto tiles for the bbox and write PNG + .pol files.
 
     Returns list of .pol paths written.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     out = Path(output_dir) / "orthophoto"
     out.mkdir(parents=True, exist_ok=True)
 
@@ -184,28 +187,41 @@ def fetch_ortho_tiles(
 
     console.print(
         f"[cyan]Fetching orthophoto ({source.__class__.__name__}) "
-        f"for bbox:[/cyan] {lat_min},{lon_min},{lat_max},{lon_max}"
+        f"for bbox:[/cyan] {lat_min},{lon_min},{lat_max},{lon_max} "
+        f"({len(tiles)} tiles, {workers} workers)"
     )
 
-    for row, col, t_lat_min, t_lon_min, t_lat_max, t_lon_max in tiles:
+    def _fetch_tile(
+        tile: tuple[int, int, float, float, float, float],
+    ) -> Path | None:
+        row, col, t_lat_min, t_lon_min, t_lat_max, t_lon_max = tile
         stem = f"{row:03d}_{col:03d}"
         png_path = out / f"{stem}.png"
         pol_path = out / f"{stem}.pol"
 
         if pol_path.exists():
-            pol_paths.append(pol_path)
-            continue
+            return pol_path
 
         rgb = source.fetch_rgb(t_lat_min, t_lon_min, t_lat_max, t_lon_max)
         if rgb is None:
-            console.print(f"[yellow]  no imagery for tile {row},{col} — skipping[/yellow]")
-            continue
+            return None
 
         _write_png(rgb, png_path)
         if not png_path.exists():
-            continue  # sliver too small, skipped
+            return None
         _write_pol(pol_path, png_path.name, t_lat_min, t_lon_min, t_lat_max, t_lon_max)
-        pol_paths.append(pol_path)
+        return pol_path
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_fetch_tile, t): t for t in tiles}
+        for done_count, fut in enumerate(as_completed(futures), 1):
+            result = fut.result()
+            if result is not None:
+                pol_paths.append(result)
+            if done_count % 50 == 0:
+                console.print(
+                    f"[dim]  tiles {done_count}/{len(tiles)} ({len(pol_paths)} written)[/dim]"
+                )
 
     console.print(f"  [green]{len(pol_paths)} orthophoto tiles[/green] → {out}")
     return pol_paths
