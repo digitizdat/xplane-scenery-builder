@@ -163,6 +163,54 @@ def catalog(subcommand: str, xplane_path: str | None) -> None:
             )
 
 
+@cli.command("subset")
+@click.option("--source", required=True, help="Path to existing scenery output folder.")
+@click.option("--bbox", default=None, help="lat_min,lon_min,lat_max,lon_max")
+@click.option("--placename", default=None, help="Place name to geocode for subset bbox.")
+@click.option("--output", required=True, help="Output folder for the subset scenery.")
+@click.option("--dsftool", default=None)
+@click.option("--no-roads", is_flag=True, help="Suppress default road network in ortho areas.")
+def subset(
+    source: str,
+    bbox: str | None,
+    placename: str | None,
+    output: str,
+    dsftool: str | None,
+    no_roads: bool,
+) -> None:
+    """Extract a smaller scenery set from an existing output folder."""
+    from pathlib import Path
+
+    from xplane_gen.subset import extract_subset
+
+    if bbox and placename:
+        raise click.UsageError("--bbox and --placename are mutually exclusive.")
+    if not bbox and not placename:
+        raise click.UsageError("Either --bbox or --placename is required.")
+
+    if placename:
+        from xplane_gen.geocode import placename_to_bbox
+
+        lat_min, lon_min, lat_max, lon_max = placename_to_bbox(placename)
+        console.print(
+            f"[cyan]Geocoded[/cyan] {placename!r} → "
+            f"{lat_min:.4f},{lon_min:.4f},{lat_max:.4f},{lon_max:.4f}"
+        )
+    else:
+        lat_min, lon_min, lat_max, lon_max = map(float, bbox.split(","))  # type: ignore[union-attr]
+
+    extract_subset(
+        source_dir=Path(source),
+        lat_min=lat_min,
+        lon_min=lon_min,
+        lat_max=lat_max,
+        lon_max=lon_max,
+        output_dir=Path(output),
+        dsftool=Path(dsftool) if dsftool else None,
+        no_roads=no_roads,
+    )
+
+
 @cli.command("review")
 @click.option("--queue", default="review_queue.json", show_default=True)
 @click.option("--output", default="resolved_queue.json", show_default=True)
