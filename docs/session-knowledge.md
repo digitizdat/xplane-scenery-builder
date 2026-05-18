@@ -75,7 +75,7 @@ fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review
 - Tile bounds must be computed from SCALE (w_m, h_m) + LOAD_CENTER (clat, clon), not from LOAD_CENTER radius field
 
 ### Backlog priorities
-1. **ROAD-002** (High): Suppress default road network in ortho areas (`--no-roads`)
+1. ~~**ROAD-002** (High): Suppress default road network in ortho areas (`--no-roads`)~~ ✅ Done
 2. **ROAD-003** (Medium): Align OSM road vectors to ortho imagery (`--align-roads`)
 3. **CLASSIFY-001** (High): Reduce LLM escalation rate — lower thresholds, enrich prompts
 4. **RENDER-001** (High): Some buildings not rendering — investigate specific failures
@@ -88,8 +88,13 @@ fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review
 - `--regen` preserves fetch stages + annotate + classify + review; re-runs write_dsf + validate
 - `--auto` skips LLM classification entirely (deterministic only)
 - `--review-all` forces all items to human review
-- Classify stage saves GeoJSON after EACH item (crash-safe)
+- `--no-roads` suppresses default road network in ortho areas
+- `--workers N` controls parallelism for ortho fetch and Bedrock classify (default: 5)
+- `--placename` geocodes a place name to bbox via Nominatim
+- Classify stage saves GeoJSON every 10 items (crash-safe; cache ensures no re-calls on resume)
 - Classify stage skips items with existing `xplane_confidence` property
+- NDVI annotation uses tiled processing (0.15° tiles) to avoid OOM on large bboxes
+- Ortho fetch and Bedrock classify run in parallel via ThreadPoolExecutor
 
 ## File Locations
 - X-Plane install: `/Users/martin/Library/Application Support/Steam/steamapps/common/X-Plane 12/`

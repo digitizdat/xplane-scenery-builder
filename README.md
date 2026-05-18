@@ -1,21 +1,21 @@
 # xplane-scenery-builder
 
-Automates the production of X-Plane 11/12 overlay scenery packs from freely
+Automates the production of [X-Plane](https://www.x-plane.com/) 11/12 overlay scenery packs from freely
 available geospatial data (OpenStreetMap, ESA WorldCover, Sentinel-2, NAIP) and
 optionally Amazon Bedrock LLM classification.
 
 ## How it works
 
-For a given lat/lon bounding box the pipeline:
+For a given lat/lon bounding box (or given place name) the pipeline:
 
-1. Fetches building footprints, roads, and land-use polygons from OpenStreetMap
-2. Fetches ESA WorldCover land classification (10 m raster)
-3. Annotates forest polygons with NDVI-derived density from Sentinel-2
-4. Optionally fetches orthophoto ground texture tiles (Sentinel-2 RGB or NAIP)
-5. Optionally classifies buildings, forests, and roads via Bedrock LLM vision
+1. Fetches building footprints, roads, and land-use polygons from [OpenStreetMap](https://www.openstreetmap.org/)
+2. Fetches [ESA WorldCover](https://esa-worldcover.org/) land classification (10 m raster)
+3. Annotates forest polygons with NDVI-derived density from [Sentinel-2](https://sentinel.esa.int/web/sentinel/missions/sentinel-2)
+4. Optionally fetches orthophoto ground texture tiles (Sentinel-2 RGB or [NAIP](https://naip-usdaonline.hub.arcgis.com/))
+5. Optionally classifies buildings, forests, and roads via [Amazon Bedrock](https://aws.amazon.com/bedrock/) LLM vision
 6. Optionally pauses for interactive human review of low-confidence items
 7. Maps features to X-Plane library assets via a YAML catalog
-8. Writes a DSF overlay and compiles it with DSFTool
+8. Writes a [DSF overlay](https://developer.x-plane.com/article/dsf-overview/) and compiles it with DSFTool
 
 The output is a scenery pack folder you drop into X-Plane's `Custom Scenery/`
 directory.
@@ -26,7 +26,7 @@ directory.
 - [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **DSFTool** from [xptools](https://github.com/X-Plane/xptools) — build from
   source or place the binary on `PATH` (or at `tools/DSFTool` in this repo)
-- AWS credentials configured for Bedrock only (public S3 data uses anonymous access)
+- AWS credentials configured for Bedrock and/or NAIP ortho (Sentinel-2 and ESA WorldCover use anonymous access; NAIP is requester-pays)
 
 ## Installation
 
@@ -47,6 +47,12 @@ All commands are run via `uv run` so you never need to activate the virtualenv m
 uv run xplane-gen generate --bbox LAT_MIN,LON_MIN,LAT_MAX,LON_MAX --output ./my_scenery
 ```
 
+Or use a place name (geocoded via Nominatim):
+
+```bash
+uv run xplane-gen generate --placename "Pocahontas County, WV" --output ./pocahontas
+```
+
 Example — Green Bank, WV:
 
 ```bash
@@ -64,12 +70,16 @@ fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review
 
 | Flag | Description |
 |------|-------------|
+| `--bbox` | Bounding box as lat_min,lon_min,lat_max,lon_max |
+| `--placename` | Place name to geocode (mutually exclusive with --bbox) |
 | `--dry-run` | Skip DSFTool compilation; write a text preview instead |
 | `--auto` | Skip LLM classification and human review; use deterministic mapping only |
 | `--dsftool PATH` | Path to DSFTool binary if not on `PATH` |
 | `--ortho-source sentinel2\|naip` | Fetch orthophoto ground texture tiles. Omit to skip |
 | `--regen` | Regenerate from cached data without re-downloading |
 | `--review-all` | Force all LLM classifications to human review |
+| `--no-roads` | Suppress default road network in ortho areas |
+| `--workers N` | Parallel workers for ortho fetch and Bedrock classify (default: 5) |
 
 ### Install the output in X-Plane
 
@@ -123,10 +133,10 @@ All commits must pass `make precommit` and follow
 
 | Data | Source | License |
 |------|--------|---------|
-| Building footprints, roads, land use | OpenStreetMap via Overpass API | ODbL |
-| Land classification (10 m) | ESA WorldCover 2021 (`s3://esa-worldcover/`) | CC-BY |
-| Satellite imagery / NDVI | Sentinel-2 L2A (`s3://sentinel-cogs/`) | Free / Copernicus |
-| Orthophoto (US, 1 m) | NAIP (`s3://naip-analytic/`) | Public domain |
+| Building footprints, roads, land use | [OpenStreetMap](https://www.openstreetmap.org/) via [Overpass API](https://overpass-api.de/) | ODbL |
+| Land classification (10 m) | [ESA WorldCover](https://esa-worldcover.org/) 2021 (`s3://esa-worldcover/`) | CC-BY |
+| Satellite imagery / NDVI | [Sentinel-2 L2A](https://registry.opendata.aws/sentinel-2-l2a-cogs/) (`s3://sentinel-cogs/`) | Free / Copernicus |
+| Orthophoto (US, 1 m) | [NAIP](https://naip-usdaonline.hub.arcgis.com/) (`s3://naip-analytic/`) | Public domain |
 
 ## AWS permissions required
 
@@ -145,11 +155,12 @@ bedrock:InvokeModel on the Haiku, Sonnet, and Opus model ARNs in us-east-1
 src/xplane_gen/
   cli.py          Click CLI entry point
   pipeline.py     TileProcessor — resumable 8-stage state machine
+  geocode.py      Place name → bbox via Nominatim
   osm.py          OSM data fetcher (Overpass API, multi-endpoint failover)
   landcover.py    ESA WorldCover raster → land-cover GeoJSON
-  ndvi.py         Sentinel-2 NDVI → forest density annotation
-  ortho.py        Orthophoto tiles (Sentinel-2 RGB or NAIP) → PNG + .pol
-  classifier.py   Bedrock LLM classifier (buildings, forests, roads) with tiered routing
+  ndvi.py         Sentinel-2 NDVI → forest density annotation (tiled)
+  ortho.py        Orthophoto tiles (Sentinel-2 RGB or NAIP), parallel fetch
+  classifier.py   Bedrock LLM classifier with parallel tiered routing
   buildings.py    OSM building footprints → FacadeFeature placements
   catalog.py      Asset catalog: building type / climate zone → library paths
   review.py       HITL review CLI
