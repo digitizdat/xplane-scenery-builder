@@ -223,6 +223,9 @@ class TileProcessor:
                         patch, {k: str(v) for k, v in props.items()}
                     )
                     props["xplane_type"] = result["building_type"]
+                    props["xplane_stories"] = result.get("stories", 2)
+                    props["xplane_roof"] = result.get("roof_type", "gable")
+                    props["xplane_material"] = result.get("material", "mixed")
                     props["xplane_height_m"] = result["height_m"]
                     props["xplane_confidence"] = result["confidence"]
                     with lock:

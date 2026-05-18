@@ -54,6 +54,11 @@ _OSM_BUILDING_TYPE: dict[str, str] = {
     "barn": "agricultural",
     "farm": "agricultural",
     "greenhouse": "agricultural",
+    "school": "civic",
+    "university": "civic",
+    "hospital": "civic",
+    "public": "civic",
+    "government": "civic",
 }
 
 
@@ -62,6 +67,7 @@ class AssetCatalog:
         with catalog_path.open(encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f)
         self._facades: dict[str, dict[str, str]] = data["facades"]
+        self._style_facades: dict[str, dict[str, dict[str, str]]] = data.get("style_facades", {})
         self._forests: dict[str, dict[str, str]] = data["forests"]
 
     def get_facade(
@@ -70,8 +76,23 @@ class AssetCatalog:
         footprint_area_m2: float,
         lat: float,
         lon: float,  # noqa: ARG002 — reserved for future regional refinement
+        stories: int | None = None,
+        material: str | None = None,
     ) -> str:
-        btype = _OSM_BUILDING_TYPE.get(building_type, "generic")
+        btype = _OSM_BUILDING_TYPE.get(building_type, building_type)
+        if btype not in self._facades:
+            btype = "generic"
+
+        # Try rich style_facades first
+        if stories is not None and btype in self._style_facades:
+            height_band = _stories_to_band(stories)
+            band_map = self._style_facades[btype].get(height_band, {})
+            if material and material in band_map:
+                return band_map[material]
+            if "default" in band_map:
+                return band_map["default"]
+
+        # Fallback to simple type × size
         bucket = _size_bucket(footprint_area_m2)
         return self._facades[btype][bucket]
 
@@ -137,3 +158,11 @@ def _size_bucket(area_m2: float) -> str:
     if area_m2 <= _LARGE:
         return "medium"
     return "large"
+
+
+def _stories_to_band(stories: int) -> str:
+    if stories <= 2:
+        return "low"
+    if stories <= 5:
+        return "mid"
+    return "high"

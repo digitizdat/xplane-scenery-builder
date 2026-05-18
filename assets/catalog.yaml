@@ -4,6 +4,80 @@
 #
 # Köppen zones used: tropical, arid, temperate, continental, polar
 # Size buckets: small (<200 m²), medium (200–1000 m²), large (>1000 m²)
+#
+# Facade selection priority:
+#   1. style_facades (type × stories × material/roof) — richest match
+#   2. facades (type × size) — fallback
+
+# Rich facade selection: type → stories_range → material/roof → path
+style_facades:
+  residential:
+    low:  # 1-2 stories
+      wood:    lib/buildings/facades/generic/low_modern_01.fac
+      brick:   lib/buildings/facades/generic/mid_classic_01.fac
+      stone:   lib/buildings/facades/generic/mid_classic_02.fac
+      default: lib/buildings/facades/generic/low_modern_01.fac
+    mid:  # 3-5 stories
+      brick:   lib/buildings/facades/generic/mid_classic_01.fac
+      concrete: lib/buildings/facades/generic/mid_modern_01.fac
+      glass:   lib/buildings/facades/generic/mid_modern_02.fac
+      default: lib/buildings/facades/generic/mid_modern_01.fac
+    high:  # 6+ stories
+      glass:   lib/buildings/facades/generic/high_glass_01.fac
+      concrete: lib/buildings/facades/generic/high_modern_01.fac
+      default: lib/buildings/facades/generic/high_universal_01.fac
+  commercial:
+    low:
+      brick:   lib/buildings/facades/commercial/low_commercial_01.fac
+      concrete: lib/buildings/facades/commercial/low_commercial_03.fac
+      metal:   lib/buildings/facades/commercial/low_commercial_05.fac
+      default: lib/buildings/facades/commercial/low_commercial_02.fac
+    mid:
+      glass:   lib/buildings/facades/commercial/low_commercial_06.fac
+      brick:   lib/buildings/facades/commercial/low_commercial_07.fac
+      default: lib/buildings/facades/commercial/low_commercial_08.fac
+    high:
+      glass:   lib/buildings/facades/generic/high_glass_02.fac
+      concrete: lib/buildings/facades/generic/high_modern_02.fac
+      default: lib/buildings/facades/generic/high_modern_03.fac
+  industrial:
+    low:
+      metal:   lib/buildings/facades/industrial/warehouse_01_45x45.fac
+      concrete: lib/buildings/facades/industrial/warehouse_02_45x45.fac
+      default: lib/buildings/facades/industrial/warehouse_03_60x60.fac
+    mid:
+      metal:   lib/buildings/facades/industrial/warehouse_04_60x60.fac
+      concrete: lib/buildings/facades/industrial/warehouse_05_60x60.fac
+      default: lib/buildings/facades/industrial/warehouse_06_90x40.fac
+    high:
+      default: lib/buildings/facades/industrial/warehouse_08_90x90.fac
+  civic:
+    low:
+      brick:   lib/g10/autogen/civic/school_E_6m_1.fac
+      default: lib/g10/autogen/civic/school_E_6m_2.fac
+    mid:
+      default: lib/g10/autogen/civic/school_H_6m_1.fac
+    high:
+      default: lib/buildings/facades/generic/high_classic_01.fac
+  religious:
+    low:
+      stone:   lib/buildings/facades/generic/mid_classic_02.fac
+      brick:   lib/buildings/facades/generic/mid_classic_01.fac
+      default: lib/buildings/facades/generic/mid_classic_01.fac
+    mid:
+      stone:   lib/buildings/facades/generic/high_classic_01.fac
+      default: lib/buildings/facades/generic/high_classic_02.fac
+    high:
+      default: lib/buildings/facades/generic/high_classic_01.fac
+  agricultural:
+    low:
+      wood:    lib/buildings/facades/industrial/warehouse_01_45x45.fac
+      metal:   lib/buildings/facades/industrial/warehouse_07_90x40.fac
+      default: lib/buildings/facades/industrial/warehouse_03_60x60.fac
+    mid:
+      default: lib/buildings/facades/industrial/warehouse_06_90x40.fac
+    high:
+      default: lib/buildings/facades/industrial/warehouse_08_90x90.fac
 
 facades:
   residential:

@@ -45,13 +45,38 @@ _BUILDING_TOOL: dict[str, Any] = {
                         "industrial",
                         "religious",
                         "agricultural",
+                        "civic",
                         "generic",
+                    ],
+                },
+                "stories": {"type": "integer", "minimum": 1, "maximum": 50},
+                "roof_type": {
+                    "type": "string",
+                    "enum": ["flat", "gable", "hip", "gambrel", "metal"],
+                },
+                "material": {
+                    "type": "string",
+                    "enum": [
+                        "brick",
+                        "wood",
+                        "concrete",
+                        "glass",
+                        "metal",
+                        "stone",
+                        "mixed",
                     ],
                 },
                 "height_m": {"type": "number"},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
-            "required": ["building_type", "height_m", "confidence"],
+            "required": [
+                "building_type",
+                "stories",
+                "roof_type",
+                "material",
+                "height_m",
+                "confidence",
+            ],
         }
     },
 }
@@ -120,9 +145,12 @@ class BedrockClassifier:
     # ── Public API ────────────────────────────────────────────────────
 
     def classify_building(self, image: np.ndarray, osm_tags: dict[str, str]) -> dict[str, Any]:
-        """Classify a building. Returns {building_type, height_m, confidence}."""
+        """Classify a building. Returns type, stories, roof, material, height, confidence."""
         prompt = (
             "Classify this building from the satellite image.\n"
+            "Determine: building type, number of stories, roof type "
+            "(flat/gable/hip/gambrel/metal), wall material "
+            "(brick/wood/concrete/glass/metal/stone/mixed), and height.\n"
             f"OSM tags: {_fmt_tags(osm_tags)}\n"
             "Use the classify_building tool."
         )
@@ -133,6 +161,9 @@ class BedrockClassifier:
             "classify_building",
             {
                 "building_type": "generic",
+                "stories": 2,
+                "roof_type": "gable",
+                "material": "mixed",
                 "height_m": 8.0,
                 "confidence": 0.0,
             },
