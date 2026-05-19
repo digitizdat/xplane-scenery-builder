@@ -25,10 +25,123 @@
 
 ---
 
+## GEO-001 — Place name geocoding
+
+**Status**: Implemented (3892b74)  
+**Priority**: Complete  
+**Source**: Usability — specifying lat/lon bboxes manually is tedious
+
+### Problem
+
+Users must look up and type exact lat/lon bounding boxes for every area they
+want to generate scenery for. This is error-prone and unfriendly.
+
+### Solution
+
+Added `--placename` CLI flag (mutually exclusive with `--bbox`). Geocodes the
+place name via Nominatim API and uses the returned bounding box. Example:
+`--placename "Pocahontas County, WV"` → `38.0365,-80.3648,38.7398,-79.6179`.
+
+---
+
+## PERF-001 — Tiled NDVI processing to prevent OOM
+
+**Status**: Implemented (839c54d, b69bf59)  
+**Priority**: Complete  
+**Source**: Laptop crash when annotating county-sized bboxes
+
+### Problem
+
+The annotate stage loaded the entire Sentinel-2 NDVI raster for the full bbox
+into memory. For large areas (e.g. Pocahontas County, ~0.7° × 0.75°), this
+consumed 4+ GB and caused OOM kills. Additionally, the SCL cloud mask band
+(20m resolution) was read using the 10m red band's window, causing out-of-bounds
+errors.
+
+### Solution
+
+Split NDVI processing into 0.15° tiles (~50 MB peak memory per tile). Replaced
+per-polygon `rasterio.mask.mask` with direct `geometry_mask` on the numpy array
+(no MemoryFile copies). Fixed SCL band to compute its own window from its own
+dataset transform before resampling to match the 10m grid.
+
+---
+
+## PERF-002 — Parallel orthophoto fetch and Bedrock classification
+
+**Status**: Implemented (a61c781, 2fb283c)  
+**Priority**: Complete  
+**Source**: Hours-long classify and fetch_ortho stages for large areas
+
+### Problem
+
+Both the ortho fetch (downloading tiles from S3) and the classify stage
+(calling Bedrock per-feature) ran sequentially. For Pocahontas County with
+~1,300 ortho tiles and ~23k classifiable features, this took hours.
+
+### Solution
+
+Added `--workers N` CLI flag (default 5). Both `fetch_ortho_tiles` and
+`_stage_classify` now use `ThreadPoolExecutor` for concurrent execution.
+GeoJSON writes and the review queue are protected with threading locks for
+crash safety. Classify stage saves progress every 10 items; LLM cache ensures
+no re-calls on resume after interruption.
+
+---
+
+## FACADE-001 — Physical-attribute-based facade selection
+
+**Status**: Implemented (8bf6847, 20f4021, 66c2b0e)  
+**Priority**: Complete  
+**Source**: Poor facade quality from functional-type-only selection
+
+### Problem
+
+Facade selection was based on building function (residential/commercial/etc)
+and footprint size. A "school" or "synagogue" could look like anything — the
+functional type tells you nothing about the building's visual appearance. This
+produced mismatched facades.
+
+### Solution
+
+1. Created `scripts/analyze_facades.py` that sends all 1,403 X-Plane facade
+   textures (17 unique atlases) to Bedrock Haiku for visual classification
+2. Generated `assets/facade_attributes.yaml` with per-facade physical
+   attributes: wall_material, wall_color, window_shape, window_density,
+   stories_min/max, roof_type, roof_color, style
+3. Rewrote the classifier's building tool to output only visual attributes
+   (stories, wall_material, wall_color, window_density, roof_type)
+4. Rewrote `catalog.py` to score all facades against the building's observed
+   attributes and pick the best match (weighted: stories 3, material 2,
+   window_density 1.5, wall_color 1, roof_type 0.5)
+5. Falls back to size-based default in `--auto` mode (no LLM)
+
+---
+
+## SUBSET-001 — Extract smaller scenery from existing output
+
+**Status**: Implemented (d0b75c1)  
+**Priority**: Complete  
+**Source**: Usability — large county runs produce huge scenery packs
+
+### Problem
+
+After generating scenery for a large area (e.g. an entire county), users may
+want to extract just a portion for testing or distribution without re-running
+the full pipeline.
+
+### Solution
+
+Added `xplane-gen subset` command. Takes an existing scenery output folder,
+a bbox or placename, and an output folder. Extracts the subset of features
+and ortho tiles that fall within the specified area.
+
+---
+
 ## ROAD-002 — Suppress default road network in ortho-covered areas
 
-**Status**: Proposed  
-**Priority**: High  
+**Status**: Implemented (b1bd078, 356a26d)  
+**Priority**: Complete  
 **Source**: Visual conflict between rendered roads and ortho imagery roads
 
 ### Problem
@@ -39,15 +152,10 @@ creating a confusing criss-cross pattern.
 
 ### Solution
 
-Add `sim/exclude_net` property to the DSF when orthophoto tiles are present.
-This suppresses X-Plane's default road rendering in the tile, letting the
-roads in the aerial imagery serve as the visual ground truth.
-
-### Implementation
-
-1. Add `--no-roads` CLI flag (suppress road network in ortho areas)
-2. When ortho tiles exist and flag is set, emit `sim/exclude_net west/south/east/north`
-3. Scope exclusion to the ortho-covered bbox (not the full 1° tile)
+Added `--no-roads` CLI flag. When set and ortho tiles are present, emits
+`sim/exclude_net west/south/east/north` in the DSF to suppress X-Plane's
+default road rendering. Also skips road classification in the classify stage
+to avoid wasting Bedrock calls on roads that won't be rendered.
 
 ### Tradeoffs
 
@@ -83,7 +191,7 @@ or misaligned.
 
 ### Dependencies
 
-- Orthophoto tiles (ORTHO-001) ✅
+- Orthophoto tiles (ORTHO-001) — implemented
 - Road classification (ROAD-001)
 - Image processing for road detection (OpenCV or similar)
 
@@ -93,6 +201,8 @@ High — requires computer vision for road pixel detection and robust
 geometric alignment. May need manual calibration points as fallback.
 
 ---
+
+## ROAD-001 — Road classification granularity
 
 **Status**: Proposed  
 **Priority**: Medium  
@@ -142,7 +252,7 @@ varying georeferencing accuracy.
 
 ### Dependencies
 
-- Orthophoto tiles (ORTHO-001) ✅
+- Orthophoto tiles (ORTHO-001) — implemented
 - Image processing for building detection (OpenCV or LLM vision)
 
 ---
@@ -184,7 +294,7 @@ Shadow-based: actual measured height per building from imagery.
 
 ### Dependencies
 
-- NAIP ortho tiles (ORTHO-001) ✅ implemented
+- NAIP ortho tiles (ORTHO-001) implemented
 - Solar geometry calculation (new, ~20 lines)
 - LLM prompt for shadow measurement (extend classifier)
 
