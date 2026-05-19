@@ -1,4 +1,4 @@
-"""Asset catalog: maps building type + climate zone → .fac/.for virtual paths."""
+"""Asset catalog: scores facades by physical attributes, maps forests by climate."""
 
 from __future__ import annotations
 
@@ -11,14 +11,13 @@ from rich.console import Console
 console = Console()
 
 _CATALOG_PATH = Path(__file__).parent.parent.parent / "assets" / "catalog.yaml"
+_FACADE_ATTRS_PATH = Path(__file__).parent.parent.parent / "assets" / "facade_attributes.yaml"
 
 # Size bucket thresholds in m²
 _SMALL = 200.0
 _LARGE = 1000.0
 
-# Simplified Köppen zone boundaries (lat/lon → zone string)
-# Ordered from most specific to least; first match wins.
-# Format: (lat_min, lat_max, zone)
+# Simplified Köppen zone boundaries (lat → zone)
 _KOPPEN_LAT_ZONES: list[tuple[float, float, str]] = [
     (-90.0, -66.5, "polar"),
     (66.5, 90.0, "polar"),
@@ -31,70 +30,57 @@ _KOPPEN_LAT_ZONES: list[tuple[float, float, str]] = [
     (50.0, 66.5, "continental"),
 ]
 
-# OSM building tag → catalog building_type
-_OSM_BUILDING_TYPE: dict[str, str] = {
-    "house": "residential",
-    "residential": "residential",
-    "apartments": "residential",
-    "detached": "residential",
-    "terrace": "residential",
-    "retail": "commercial",
-    "commercial": "commercial",
-    "office": "commercial",
-    "supermarket": "commercial",
-    "shop": "commercial",
-    "industrial": "industrial",
-    "warehouse": "industrial",
-    "factory": "industrial",
-    "church": "religious",
-    "cathedral": "religious",
-    "mosque": "religious",
-    "temple": "religious",
-    "synagogue": "religious",
-    "barn": "agricultural",
-    "farm": "agricultural",
-    "greenhouse": "agricultural",
-    "school": "civic",
-    "university": "civic",
-    "hospital": "civic",
-    "public": "civic",
-    "government": "civic",
-}
-
 
 class AssetCatalog:
-    def __init__(self, catalog_path: Path = _CATALOG_PATH) -> None:
+    def __init__(
+        self,
+        catalog_path: Path = _CATALOG_PATH,
+        facade_attrs_path: Path = _FACADE_ATTRS_PATH,
+    ) -> None:
         with catalog_path.open(encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f)
-        self._facades: dict[str, dict[str, str]] = data["facades"]
-        self._style_facades: dict[str, dict[str, dict[str, str]]] = data.get("style_facades", {})
+        self._defaults: dict[str, str] = data["facade_defaults"]
         self._forests: dict[str, dict[str, str]] = data["forests"]
+
+        # Load facade physical attributes
+        self._facade_attrs: dict[str, dict[str, Any]] = {}
+        if facade_attrs_path.exists():
+            with facade_attrs_path.open(encoding="utf-8") as f:
+                self._facade_attrs = yaml.safe_load(f) or {}
 
     def get_facade(
         self,
-        building_type: str,
+        building_type: str,  # noqa: ARG002 — kept for API compat
         footprint_area_m2: float,
-        lat: float,
-        lon: float,  # noqa: ARG002 — reserved for future regional refinement
+        lat: float,  # noqa: ARG002
+        lon: float,  # noqa: ARG002
         stories: int | None = None,
         material: str | None = None,
+        wall_color: str | None = None,
+        window_density: str | None = None,
+        roof_type: str | None = None,
     ) -> str:
-        btype = _OSM_BUILDING_TYPE.get(building_type, building_type)
-        if btype not in self._facades:
-            btype = "generic"
+        """Select the best-matching facade based on physical attributes.
 
-        # Try rich style_facades first
-        if stories is not None and btype in self._style_facades:
-            height_band = _stories_to_band(stories)
-            band_map = self._style_facades[btype].get(height_band, {})
-            if material and material in band_map:
-                return band_map[material]
-            if "default" in band_map:
-                return band_map["default"]
+        Falls back to size-based default when no attributes or no facade_attrs.
+        """
+        if not self._facade_attrs or (stories is None and material is None):
+            return self._defaults[_size_bucket(footprint_area_m2)]
 
-        # Fallback to simple type × size
-        bucket = _size_bucket(footprint_area_m2)
-        return self._facades[btype][bucket]
+        best_path = ""
+        best_score = -1.0
+
+        for fac_path, attrs in self._facade_attrs.items():
+            if not attrs:
+                continue
+            score = _score_facade(attrs, stories, material, wall_color, window_density, roof_type)
+            if score > best_score:
+                best_score = score
+                best_path = fac_path
+
+        if best_path:
+            return best_path
+        return self._defaults[_size_bucket(footprint_area_m2)]
 
     def get_forest(self, esa_label: str, lat: float, lon: float) -> str:  # noqa: ARG002
         zone = self.get_climate_zone(lat)
@@ -115,13 +101,12 @@ class AssetCatalog:
         exports = _parse_library_exports(lib_root)
 
         ok = True
-        for btype, sizes in self._facades.items():
-            for size, vpath in sizes.items():
-                found = vpath in exports
-                status = "✓" if found else "✗"
-                if not found:
-                    ok = False
-                console.print(f"  [{status}] facades/{btype}/{size}: {vpath}")
+        for size, vpath in self._defaults.items():
+            found = vpath in exports
+            status = "✓" if found else "✗"
+            if not found:
+                ok = False
+            console.print(f"  [{status}] defaults/{size}: {vpath}")
         for label, zones in self._forests.items():
             for zone, vpath in zones.items():
                 found = vpath in exports
@@ -129,12 +114,74 @@ class AssetCatalog:
                 if not found:
                     ok = False
                 console.print(f"  [{status}] forests/{label}/{zone}: {vpath}")
-        if ok:
+        # Check facade_attributes entries
+        missing = 0
+        for vpath in self._facade_attrs:
+            if vpath not in exports:
+                missing += 1
+        if missing:
+            console.print(
+                f"  [yellow]{missing}/{len(self._facade_attrs)} "
+                f"facade_attributes entries not in library[/yellow]"
+            )
+        if ok and missing == 0:
             console.print("[green]All catalog entries validated.[/green]")
+        elif ok:
+            console.print(
+                "[yellow]Core catalog OK; some facade_attributes may vary by version.[/yellow]"
+            )
         else:
             console.print(
                 "[yellow]Some entries not found — paths may differ by X-Plane version.[/yellow]"
             )
+
+
+def _score_facade(
+    attrs: dict[str, Any],
+    stories: int | None,
+    material: str | None,
+    wall_color: str | None,
+    window_density: str | None,
+    roof_type: str | None,
+) -> float:
+    """Score a facade's attributes against desired building attributes.
+
+    Higher score = better match. Stories fit is weighted heaviest.
+    """
+    score = 0.0
+
+    # Stories fit (weight: 3) — must be within facade's range
+    if stories is not None:
+        fac_min = attrs.get("stories_min", 1)
+        fac_max = attrs.get("stories_max", 60)
+        if fac_min <= stories <= fac_max:
+            # Prefer facades whose range is tighter around the target
+            range_size = fac_max - fac_min + 1
+            score += 3.0 / max(1, range_size / 5)
+        else:
+            # Hard penalty for out-of-range
+            score -= 5.0
+
+    # Material match (weight: 2)
+    if material:
+        if attrs.get("wall_material") == material:
+            score += 2.0
+        elif attrs.get("wall_material") == "mixed":
+            score += 0.5
+
+    # Wall color (weight: 1)
+    if wall_color and attrs.get("wall_color") == wall_color:
+        score += 1.0
+
+    # Window density (weight: 1.5)
+    if window_density and attrs.get("window_density") == window_density:
+        score += 1.5
+
+    # Roof type (weight: 0.5)
+    if roof_type and attrs.get("roof_type") == roof_type:
+        score += 0.5
+
+    return score
 
 
 def _parse_library_exports(lib_root: Path) -> set[str]:
@@ -158,11 +205,3 @@ def _size_bucket(area_m2: float) -> str:
     if area_m2 <= _LARGE:
         return "medium"
     return "large"
-
-
-def _stories_to_band(stories: int) -> str:
-    if stories <= 2:
-        return "low"
-    if stories <= 5:
-        return "mid"
-    return "high"

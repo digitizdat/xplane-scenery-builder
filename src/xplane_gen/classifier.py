@@ -32,29 +32,13 @@ _REVIEW_THRESHOLD = 0.75
 
 _BUILDING_TOOL: dict[str, Any] = {
     "name": "classify_building",
-    "description": "Classify a building from satellite imagery and OSM tags.",
+    "description": "Describe a building's physical appearance from satellite imagery.",
     "inputSchema": {
         "json": {
             "type": "object",
             "properties": {
-                "building_type": {
-                    "type": "string",
-                    "enum": [
-                        "residential",
-                        "commercial",
-                        "industrial",
-                        "religious",
-                        "agricultural",
-                        "civic",
-                        "generic",
-                    ],
-                },
                 "stories": {"type": "integer", "minimum": 1, "maximum": 50},
-                "roof_type": {
-                    "type": "string",
-                    "enum": ["flat", "gable", "hip", "gambrel", "metal"],
-                },
-                "material": {
+                "wall_material": {
                     "type": "string",
                     "enum": [
                         "brick",
@@ -63,17 +47,47 @@ _BUILDING_TOOL: dict[str, Any] = {
                         "glass",
                         "metal",
                         "stone",
+                        "stucco",
                         "mixed",
                     ],
+                },
+                "wall_color": {
+                    "type": "string",
+                    "enum": [
+                        "white",
+                        "beige",
+                        "tan",
+                        "brown",
+                        "gray",
+                        "red",
+                        "blue",
+                        "green",
+                        "dark",
+                    ],
+                },
+                "window_density": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "sparse",
+                        "moderate",
+                        "dense",
+                        "curtain_wall",
+                    ],
+                },
+                "roof_type": {
+                    "type": "string",
+                    "enum": ["flat", "gable", "hip", "gambrel", "shed", "metal", "unknown"],
                 },
                 "height_m": {"type": "number"},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
             "required": [
-                "building_type",
                 "stories",
+                "wall_material",
+                "wall_color",
+                "window_density",
                 "roof_type",
-                "material",
                 "height_m",
                 "confidence",
             ],
@@ -145,12 +159,12 @@ class BedrockClassifier:
     # ── Public API ────────────────────────────────────────────────────
 
     def classify_building(self, image: np.ndarray, osm_tags: dict[str, str]) -> dict[str, Any]:
-        """Classify a building. Returns type, stories, roof, material, height, confidence."""
+        """Classify a building's physical appearance from satellite imagery."""
         prompt = (
-            "Classify this building from the satellite image.\n"
-            "Determine: building type, number of stories, roof type "
-            "(flat/gable/hip/gambrel/metal), wall material "
-            "(brick/wood/concrete/glass/metal/stone/mixed), and height.\n"
+            "Describe this building's physical appearance from the satellite image.\n"
+            "Determine: number of stories, wall material, wall color, "
+            "window density (none/sparse/moderate/dense/curtain_wall), "
+            "roof type (flat/gable/hip/gambrel/shed/metal), and height in meters.\n"
             f"OSM tags: {_fmt_tags(osm_tags)}\n"
             "Use the classify_building tool."
         )
@@ -160,10 +174,11 @@ class BedrockClassifier:
             _BUILDING_TOOL,
             "classify_building",
             {
-                "building_type": "generic",
                 "stories": 2,
+                "wall_material": "mixed",
+                "wall_color": "beige",
+                "window_density": "moderate",
                 "roof_type": "gable",
-                "material": "mixed",
                 "height_m": 8.0,
                 "confidence": 0.0,
             },

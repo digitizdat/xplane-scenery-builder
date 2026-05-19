@@ -43,7 +43,7 @@ def buildings_to_facades(
         if shp.is_empty:
             continue
 
-        btype: str = str(props.get("xplane_type", props.get("building", "generic")))
+        btype: str = str(props.get("building", "generic"))
         height = _building_height(props)
         area = float(shp.area * _m2_per_deg2(tile_centre_lat))
         fac_path = catalog.get_facade(
@@ -53,6 +53,9 @@ def buildings_to_facades(
             tile_centre_lon,
             stories=props.get("xplane_stories"),
             material=props.get("xplane_material"),
+            wall_color=props.get("xplane_wall_color"),
+            window_density=props.get("xplane_window_density"),
+            roof_type=props.get("xplane_roof"),
         )
 
         features.append(FacadeFeature(resource=fac_path, height=height, coords=coords))

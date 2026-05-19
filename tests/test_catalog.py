@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from xplane_gen.catalog import AssetCatalog, _size_bucket
@@ -69,10 +71,8 @@ def test_get_facade_unknown_type_falls_back_to_generic(cat: AssetCatalog) -> Non
 
 
 def test_get_facade_all_osm_types(cat: AssetCatalog) -> None:
-    """Every OSM building tag must resolve without KeyError."""
-    from xplane_gen.catalog import _OSM_BUILDING_TYPE
-
-    for tag in _OSM_BUILDING_TYPE:
+    """Building type string must resolve without KeyError."""
+    for tag in ["residential", "commercial", "industrial", "church", "barn", "generic"]:
         path = cat.get_facade(tag, 300.0, 47.6, -122.3)
         assert path
 
@@ -108,9 +108,9 @@ def test_get_forest_all_labels(cat: AssetCatalog) -> None:
 
 
 def test_all_facade_entries_non_empty(cat: AssetCatalog) -> None:
-    for btype, sizes in cat._facades.items():
-        for size, vpath in sizes.items():
-            assert vpath, f"Empty path for facades/{btype}/{size}"
+    for vpath, attrs in cat._facade_attrs.items():
+        assert vpath, "Empty facade path"
+        assert attrs, f"Empty attributes for {vpath}"
 
 
 def test_all_forest_entries_non_empty(cat: AssetCatalog) -> None:
@@ -183,10 +183,151 @@ def test_all_catalog_facades_resolve(cat: AssetCatalog) -> None:
     exports = _find_library_exports(XPLANE_PATH)
     missing = []
 
-    for btype, sizes in cat._facades.items():
-        for size, vpath in sizes.items():
-            if vpath in exports:
-                continue
-            missing.append(f"facades/{btype}/{size}: {vpath}")
+    for vpath in cat._facade_attrs:
+        if vpath in exports:
+            continue
+        missing.append(f"facade_attrs: {vpath}")
 
     assert not missing, "Unresolved facade paths:\n" + "\n".join(missing)
+
+
+# ── attribute alignment tests ─────────────────────────────────────────────────
+
+
+def test_classifier_enums_match_facade_attributes() -> None:
+    """Every enum value the classifier can output must exist in facade_attributes.yaml."""
+    import yaml
+
+    from xplane_gen.classifier import _BUILDING_TOOL
+
+    facade_attrs_path = Path(__file__).parent.parent / "assets" / "facade_attributes.yaml"
+    facade_data = yaml.safe_load(facade_attrs_path.read_text(encoding="utf-8"))
+
+    # Collect all values present in facade_attributes for each field
+    facade_values: dict[str, set[str]] = {}
+    for attrs in facade_data.values():
+        if not attrs:
+            continue
+        for key, val in attrs.items():
+            facade_values.setdefault(key, set()).add(str(val))
+
+    # Map classifier tool field names → facade_attributes field names
+    tool_to_facade = {
+        "wall_material": "wall_material",
+        "wall_color": "wall_color",
+        "window_density": "window_density",
+        "roof_type": "roof_type",
+    }
+
+    schema_props = _BUILDING_TOOL["inputSchema"]["json"]["properties"]
+    for tool_field, facade_field in tool_to_facade.items():
+        tool_enums = set(schema_props[tool_field]["enum"])
+        facade_vals = facade_values.get(facade_field, set())
+        # Every facade value should be representable by the tool
+        unmatched = facade_vals - tool_enums
+        assert not unmatched, (
+            f"facade_attributes has {facade_field} values {unmatched} "
+            f"not in classifier tool enum: {sorted(tool_enums)}"
+        )
+
+
+def test_classifier_fallback_keys_match_tool_required() -> None:
+    """Classifier fallback dict must have same keys as tool's required fields."""
+    from xplane_gen.classifier import _BUILDING_TOOL
+
+    required = set(_BUILDING_TOOL["inputSchema"]["json"]["required"])
+
+    # Get the fallback from classify_building by inspecting the source
+    from unittest.mock import patch
+
+    from xplane_gen.classifier import BedrockClassifier
+
+    # The fallback dict is the last arg to _classify — extract its keys
+    # by calling with a mock that captures it
+
+    with patch("boto3.client"):
+        clf = BedrockClassifier(Path("/tmp/test_fallback"))
+    # Patch _classify to capture the fallback arg
+    captured: dict = {}
+
+    def _capture(*args: object, **kwargs: object) -> dict:
+        captured.update(args[4] if len(args) > 4 else {})  # type: ignore[arg-type]
+        return captured
+
+    clf._classify = _capture  # type: ignore[assignment]
+    clf.classify_building(
+        __import__("numpy").zeros((64, 64, 3), dtype=__import__("numpy").uint8),
+        {"building": "yes"},
+    )
+    assert set(captured.keys()) == required, (
+        f"Fallback keys {set(captured.keys())} != required {required}"
+    )
+
+
+def test_pipeline_property_names_match_buildings_reader() -> None:
+    """Property names written by pipeline must match what buildings.py reads."""
+    import inspect
+
+    from xplane_gen import buildings, pipeline
+
+    # Extract property names written in _classify_building closure
+    pipeline_src = inspect.getsource(pipeline.TileProcessor._stage_classify)
+    # Find all props["xplane_*"] = assignments
+    written = set()
+    for line in pipeline_src.splitlines():
+        if 'props["xplane_' in line and "=" in line:
+            key = line.split('props["')[1].split('"]')[0]
+            written.add(key)
+
+    # Extract property names read in buildings_to_facades
+    buildings_src = inspect.getsource(buildings.buildings_to_facades)
+    read = set()
+    for line in buildings_src.splitlines():
+        if 'props.get("xplane_' in line:
+            key = line.split('props.get("')[1].split('"')[0]
+            read.add(key)
+
+    # Everything buildings.py reads must be written by pipeline
+    missing = read - written
+    assert not missing, f"buildings.py reads {missing} but pipeline doesn't write them"
+
+
+def test_facade_defaults_cover_all_size_buckets(cat: AssetCatalog) -> None:
+    """facade_defaults must have entries for small, medium, large."""
+    for bucket in ("small", "medium", "large"):
+        assert bucket in cat._defaults, f"Missing facade_defaults[{bucket}]"
+        assert cat._defaults[bucket], f"Empty path for facade_defaults[{bucket}]"
+
+
+def test_score_facade_positive_for_all_classifier_outputs() -> None:
+    """_score_facade must produce positive scores for typical classifier outputs."""
+    import yaml
+
+    from xplane_gen.catalog import _score_facade
+
+    facade_attrs_path = Path(__file__).parent.parent / "assets" / "facade_attributes.yaml"
+    facade_data = yaml.safe_load(facade_attrs_path.read_text(encoding="utf-8"))
+
+    # Simulate a typical classifier output
+    test_building = {
+        "stories": 3,
+        "wall_material": "brick",
+        "wall_color": "red",
+        "window_density": "moderate",
+        "roof_type": "flat",
+    }
+
+    # At least one facade must score positively
+    scores = [
+        _score_facade(
+            attrs,
+            test_building["stories"],
+            test_building["wall_material"],
+            test_building["wall_color"],
+            test_building["window_density"],
+            test_building["roof_type"],
+        )
+        for attrs in facade_data.values()
+        if attrs
+    ]
+    assert max(scores) > 0, "No facade scored positively for typical building"

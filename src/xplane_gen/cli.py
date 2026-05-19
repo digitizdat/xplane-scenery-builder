@@ -158,7 +158,7 @@ def catalog(subcommand: str, xplane_path: str | None) -> None:
         else:
             console.print("[yellow]No --xplane-path given; skipping file existence check.[/yellow]")
             console.print(
-                f"Catalog loaded: {len(cat._facades)} facade entries, "
+                f"Catalog loaded: {len(cat._facade_attrs)} facade entries, "
                 f"{len(cat._forests)} forest entries."
             )
 
