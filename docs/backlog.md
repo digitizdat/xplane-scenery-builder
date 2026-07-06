@@ -414,3 +414,346 @@ loads DDS faster than PNG.
 
 Add `--dds` flag to `generate` command. After PNG tiles are written, convert
 to DDS and update `.pol` references. Keep PNG as default for simplicity.
+
+---
+
+## RENDER-002 — Headless scenery rendering to raster for LLM analysis
+
+**Status**: Proposed  
+**Priority**: Medium (research spike)  
+**Source**: Idea — enable automated visual QA without launching X-Plane 12
+
+### Concept
+
+Render a generated scenery pack from one or more viewpoints to a raster image
+(PNG) programmatically, without running X-Plane 12. X-Plane is slow to load,
+requires manual camera positioning, and cannot run unattended. An offline
+renderer would let us screenshot scenery for LLM visual analysis inside an
+automated pipeline.
+
+### What has to be rendered
+
+A pack is a DSF overlay that references X-Plane library assets by virtual path:
+- Facades (`.fac`) — procedural wall geometry extruded along building footprint rings
+- Forests (`.for`) — scattered tree billboards at a density value
+- Draped polygons (`.pol`) — orthophoto textures draped on the terrain mesh
+- The overlay carries no base terrain mesh; a DEM is needed to drape ortho and seat buildings
+
+### Approach options
+
+1. **Approximate renderer (recommended first step)**: Resolve library virtual
+   paths to asset files via `library.txt`, then render a simplified scene —
+   extruded boxes with facade wall textures, tree billboards for forests, and
+   ortho draped on a flat or DEM-derived surface. Use an offline engine
+   (Blender `bpy` headless, `pyrender`/`trimesh`, `moderngl`, or PyVista/VTK).
+   Fidelity is coarse but likely sufficient for LLM comparison.
+2. **Asset-accurate renderer**: Load actual `.obj` geometry and reproduce
+   X-Plane's procedural `.fac`/`.for` generation. Much higher effort; the
+   facade and forest engines are non-trivial to replicate.
+3. **Reuse existing tooling**: Community X-Plane OBJ importers (e.g.
+   XPlane2Blender) handle `.obj`, but not the procedural `.fac`/`.for` assets
+   that dominate our output.
+
+### Difficulty assessment
+
+- Approximate approach: moderate. The hard parts are procedural facade
+  extrusion and obtaining a base DEM to drape ortho.
+- Asset-accurate approach: high in principle, but **substantially de-risked** by
+  the WED source (see WED-001, explored 2026-07-05). X-Plane's own asset code is
+  available under MIT: `Obj/XObjReadWrite.cpp` (GL-free OBJ8 parser),
+  `Obj/ObjDraw.cpp` (callback-based traversal — supply callbacks that emit
+  triangles instead of drawing GL), `WEDEntities/WED_FacadePreview.cpp`
+  (procedural facade → mesh), and `XPTools/ViewObj.cpp` (headless-render
+  template). The remaining work is porting this logic to Python and retargeting
+  the draw step to an offscreen renderer (pyrender/moderngl), plus a DEM source.
+
+### Dependencies
+
+- DSF text form via DSFTool `dsf2text` (available)
+- Library path resolution via `library.txt` (implemented in `catalog.py`)
+- A DEM source for terrain (new; could reuse existing raster data plumbing)
+
+### Open questions
+
+- Which engine gives the best headless throughput for an unattended loop?
+- Is billboard/box fidelity enough for the LLM to judge correctness, or is real geometry needed?
+- How should viewpoints be defined (ground-level, oblique aerial, orthographic top-down)?
+
+### Enables
+
+- REFINE-001 (closed-loop scenery refinement)
+
+---
+
+## REFINE-001 — Closed-loop scenery refinement via render-and-compare
+
+**Status**: Proposed  
+**Priority**: Medium (research; depends on RENDER-002)  
+**Source**: Idea — autonomous generate/render/compare/adjust loop
+
+### Concept
+
+Build an unattended feedback loop that improves scenery by comparing a rendered
+version against ground truth and iterating:
+
+1. Generate scenery from current assumptions
+2. Render it to a raster from chosen viewpoint(s) (RENDER-002)
+3. Have an LLM compare the render against ground truth — descriptive text,
+   engineering data, or a real photo of the object or area
+4. LLM emits a set of concrete adjustments (facade choice, height, forest
+   density, ortho source, placement offset, land-cover mapping, etc.)
+5. Apply adjustments, regenerate, and repeat until the comparison converges or
+   a stop condition is met
+
+Applies to both landscape (land cover, forests, ortho) and individual objects
+(e.g. a specific landmark such as the Green Bank Telescope).
+
+### Why it is interesting
+
+Removes the human from the visual-QA loop and lets the system self-correct
+toward a target it can see, rather than toward assumptions it cannot verify.
+
+### Design considerations
+
+- **Action space**: define the discrete set of adjustments the LLM may request,
+  each mapped to a concrete pipeline input (catalog overrides, per-feature
+  attribute overrides, height, density, ortho source, alignment offsets). The
+  loop can only fix what the action space exposes.
+- **Ground truth ingestion**: support text specs, engineering data, and photos;
+  normalize viewpoint between render and reference photo (camera pose, focal
+  length, sun angle).
+- **Convergence and stopping**: score each iteration; stop on score threshold,
+  diminishing returns, or max iterations. Guard against oscillation.
+- **Cost control**: each iteration is a full generate + render + LLM cycle;
+  cache aggressively and scope iterations to changed features.
+- **Scope granularity**: per-object loop (single building) vs per-tile loop
+  (whole landscape). Start with a single object for tractability.
+
+### Dependencies
+
+- RENDER-002 (headless rendering) — prerequisite
+- Per-feature attribute override mechanism (partly exists via GeoJSON
+  `xplane_*` properties and the review queue)
+- A scoring/comparison prompt and a structured adjustment schema (new)
+
+### Complexity
+
+High — the most ambitious item in the backlog. Recommend starting with a
+single-object proof of concept (one building, one reference photo, a small
+fixed action space) before generalizing to landscapes.
+
+---
+
+## GATEWAY-001 — Explore X-Plane Scenery Gateway API as a data source
+
+**Status**: Proposed  
+**Priority**: Low (research spike)  
+**Source**: Idea — evaluate gateway.x-plane.com as an input source
+
+### Concept
+
+The X-Plane Scenery Gateway (`gateway.x-plane.com`) is Laminar's repository of
+community-contributed airport scenery, authored in WorldEditor (WED) and
+shipped with the sim. It exposes a public API at `gateway.x-plane.com/api`.
+Investigate whether that API can serve as a data source for this pipeline.
+
+### Potential uses
+
+- Airport layout and boundary data to inform tile selection or masking
+- Cross-reference generated overlay scenery against existing Gateway airports
+  to avoid conflicts near airfields
+- Study how Gateway airports use the Laminar default library (they are
+  constrained to it) as a reference for our own asset selection
+
+### Context
+
+- Gateway scenery is airport-focused and built in WED; this project produces
+  DSF overlay packs for arbitrary areas, so the artifact types differ
+- The redistributability constraint that governs the Gateway (default library
+  only) is already the rationale behind this project's Phase 1 asset strategy
+  (see `REQUIREMENTS.md` §4.2)
+
+### Approach
+
+1. Read the API documentation at `gateway.x-plane.com/api`
+2. Enumerate available endpoints and data (airports, scenery packs, metadata)
+3. Prototype a fetch of one airport's data and assess format and usefulness
+4. Decide whether it warrants a dedicated data-source module
+
+### API surface (from the docs, `/apiv1/`)
+
+- `GET /apiv1/airports` — all ~37,000 airports (code, name, lat/lon, elevation, counts)
+- `GET /apiv1/airport/{code}` — one airport plus its scenery pack list/metadata
+- `GET /apiv1/scenery/{id}` — a scenery pack: metadata + base64-encoded ZIP blob
+- `GET /apiv1/metadata`, `/apiv1/stats`, `/apiv1/releases`, `/apiv1/release/{version}`
+- `PUT /apiv1/scenery` — upload (auth required; discouraged in favor of WED uploader)
+- Usage etiquette: no rate metering, but the docs ask callers to avoid
+  unnecessary bulk requests
+- **Reference implementation**: `WEDImportExport/WED_GatewayImport.cpp` and
+  `WED_GatewayExport.cpp` in the local xptools checkout show the exact API usage
+  (libcurl + JSON, base64 ZIP handling, auth). MIT-licensed; usable as a guide.
+
+### Data license — CONFIRMED GPLv2 (verified 2026-07-05)
+
+**Gateway scenery packs are licensed under the GNU General Public License
+version 2 (GPLv2).** Verified by downloading a pack via `GET /apiv1/scenery/1753`
+(KBOS), decoding the base64 ZIP, and reading the bundled `LICENSING.txt`, which
+is the full GPLv2 text. This matches the X-Plane forum consensus (thread 323867).
+
+**Implications for this project (not legal advice — confirm before distributing):**
+- GPLv2 is strong copyleft. A distributed work "based on the Program" (a
+  derivative) must itself be GPLv2, with corresponding source made available.
+- **Low risk — factual/reference use**: reading airport coordinates, elevations,
+  or presence from the API to inform tile selection or masking. Facts are not
+  copyrightable; GPLv2 §0 notes program *output* is covered only if it is itself
+  a work based on the Program.
+- **High risk — content incorporation**: bundling Gateway scenery *content*
+  (DSF geometry, objects, apt.dat from a pack) into this project's generated
+  output would make that output a derivative, forcing GPLv2 copyleft (and source
+  disclosure) onto the packs we distribute.
+- Distinct from the **MIT/X11** license of the xptools/WED *source code*
+  (see WED-001) — that is permissive; Gateway scenery *content* is copyleft.
+
+**Recommendation**: treat the Gateway as a factual reference source (airport
+locations/metadata), not a source of scenery content to embed, unless the
+project is prepared to release generated packs under GPLv2.
+
+### Open questions
+
+- Does the API provide anything not already available from OSM? Gateway data is
+  airport-focused (layouts, apt.dat, 3D packs); overlap with OSM is partial.
+- Confirm this project's own output/redistribution license model before any
+  content-level (non-factual) use of Gateway data.
+
+### Complexity
+
+Low to moderate for the research spike; unknown for any resulting feature.
+The GPLv2 copyleft constraint, not availability, is the gating factor.
+
+---
+
+## WED-001 — Explore reusing or building on the WorldEditor (WED) codebase
+
+**Status**: Proposed  
+**Priority**: Low (research spike)  
+**Source**: Idea — evaluate WED source for reuse
+
+### Concept
+
+WorldEditor (WED) is X-Plane's official scenery editor. Its C++ source lives in
+the same `xptools` repository as DSFTool, already checked out locally at
+`/Users/martin/src/xptools/src/` (modules `WEDCore`, `WEDEntities`, `WEDMap`,
+`WEDImportExport`, `WEDLibrary`, `WEDResources`, etc.). Investigate whether any
+of it can be reused or built upon for this project.
+
+### Findings (explored 2026-07-05)
+
+Concrete file map and comparison against our code:
+
+- **Library resolution — `WEDCore/WED_LibraryMgr.{cpp,h}`** (the real engine;
+  `WEDLibrary/` is only GUI panes). Resolves all resource types
+  (obj/fac/for/pol/lin/str/agp/road), handles every `EXPORT_*` directive
+  variant, tracks resource **status** (public/deprecated/private — deprecated
+  and private fail Gateway validation), handles **variants** (one vpath with
+  multiple EXPORTs → randomized appearance), seasonal/regional, and
+  default-vs-third-party origin. Our `catalog.py._parse_library_exports` only
+  captures `.for`/`.fac` from plain `EXPORT` lines and ignores status,
+  variants, other directives, and other asset types.
+- **OBJ8 geometry — `Obj/XObjReadWrite.cpp`** parses `.obj` into an `XObj8`
+  model. GL-free, directly portable to Python.
+- **OBJ8 drawing — `Obj/ObjDraw.cpp`** walks an `XObj8` via a callback struct
+  (`ObjDrawFuncs10_t`). WED supplies OpenGL callbacks, but a caller can supply
+  its own callbacks to capture triangles instead of drawing — no hard GL
+  dependency in the traversal itself.
+- **Procedural facades — `WEDEntities/WED_FacadePreview.cpp`** turns a `.fac`
+  definition + footprint into mesh geometry. This is the "hard part" flagged in
+  RENDER-002, and it already exists.
+- **Asset preview pipeline — `WEDMap/WED_PreviewLayer.cpp`** wires it all
+  together: `draw_obj`, `draw_agp`, `draw_facade`, line/string previews, and
+  draped-polygon (ortho) rendering.
+- **Standalone viewer — `XPTools/ViewObj.cpp`** renders an OBJ outside the
+  editor: a template for a headless renderer.
+- **DSF I/O — `DSF/DSFLib.cpp` + `DSFLibWrite.cpp`** are the actual read/write
+  library that DSFTool wraps. We already use it indirectly by shelling out.
+- **Gateway — `WEDImportExport/WED_Gateway{Export,Import}.cpp`** are a working
+  reference for the Gateway API (libcurl + JSON, base64 ZIP, README/LICENSING
+  generation, auth). Informs GATEWAY-001.
+- **Ortho — `WEDImportExport/WED_OrthoExport.cpp`** does georeferenced ortho
+  export using geotiff/proj; a reference for `ortho.py` `.pol` correctness.
+
+### Per-area recommendations
+
+- **Port to Python (high value)**: `WED_LibraryMgr`'s parsing + status model to
+  replace/extend `catalog.py`'s parser. Needed for ASSET-001 (more asset types)
+  and to keep output redistributable/Gateway-valid (never emit deprecated or
+  private assets). MIT/X11 permits direct porting.
+- **RENDER-002 de-risker**: reuse `XObjReadWrite` (port the parser), the
+  `ObjDraw` callback pattern (supply callbacks that emit triangles to
+  pyrender/moderngl instead of GL), and `WED_FacadePreview` (port the
+  procedural facade logic). This shifts RENDER-002 from "reimplement X-Plane's
+  procedural engines" to "port existing MIT logic and retarget the draw step".
+- **GATEWAY-001 reference**: `WED_GatewayImport` for our read-only use.
+- **DSF I/O**: keep shelling out to DSFTool; linking `DSFLib` only helps if we
+  need in-process DSF read/write, which we currently do not.
+
+### Spike: OBJ8 parser port (completed 2026-07-05)
+
+Validated the "port to Python" approach by porting WED's OBJ8 read grammar
+(`Obj/XObjReadWrite.cpp`) to `spikes/obj8_parser.py` (~140 lines, geometry only).
+
+- **Result**: 296/300 randomly sampled default-library `.obj` files parsed, with
+  vertex counts and TRIS index sums matching an independent text cross-check
+  (0 mismatches). The 4 "failures" are legacy **OBJ7 (version 700)** files, which
+  the parser correctly rejects — WED's `XObj8Read` likewise only accepts 800.
+- **Grammar ported**: header (`I`/`A`, `800`, `OBJ`), `POINT_COUNTS`, `VT`
+  (8 floats), `IDX`/`IDX10`, `TRIS`/`LINES`/`LIGHTS` (offset+count into the index
+  list), `TEXTURE*`, and `ATTR_LOD near far` (LOD buckets). Verified on a draped
+  terrain obj (4v/6i/2 tris) and an autogen building (49v/87i/29 tris, IDX10).
+- **Gotcha found**: `ATTR_LOD_draped` takes a single distance argument and is a
+  draped-render attribute, not a geometry LOD bucket like `ATTR_LOD near far`.
+- **Conclusion**: porting is straightforward and low-risk — the OBJ8 format is
+  simple and GL-free, confirming the RENDER-002 plan. Remaining work for a full
+  renderer is the draw step (retarget to pyrender/moderngl) and procedural
+  facades (`WED_FacadePreview`), not OBJ parsing. A production port should also
+  add a legacy OBJ7 path or explicitly skip v700 assets.
+
+### Reuse options
+
+1. **Reference only**: study WED's algorithms (library resolution, DSF I/O,
+   facade handling) and reimplement the needed parts in Python. Lowest risk.
+2. **Port specific modules**: translate a focused module (e.g. library
+   resolution) to Python for exact fidelity with X-Plane behavior.
+3. **Link/bridge C++**: build a small C++ tool or a `pybind11` binding against
+   selected WED/xptools libraries. Highest integration cost.
+
+### Constraints and open questions
+
+- **Language mismatch**: WED is C++; this project is Python. Any direct reuse
+  needs a bridge (subprocess tool or bindings) or a port.
+- **License**: confirmed permissive. Per the xptools repo README, code original
+  to Laminar Research under `src/` is licensed **MIT/X11**, which allows reuse,
+  porting, and linking with attribution. (README caveat: a file with no
+  copyright or double/conflicting copyright is likely a clerical error and
+  should be reported to Laminar.)
+- **Build system**: xptools has its own build tooling; assess effort to build
+  the relevant libraries in isolation.
+
+### Complexity
+
+Moderate, and lower than initially assumed. The library-resolution port is
+self-contained (parsing + a status/variant model, no GUI). The RENDER-002 reuse
+is the larger effort but is de-risked because the parsing and procedural-facade
+logic already exist as MIT code and the draw step is callback-based (retargetable
+away from OpenGL). Recommended path: **port** the specific modules we need
+(option 2) rather than link C++ (option 3) — the useful logic is
+GUI-independent, and porting keeps the project pure-Python.
+
+### Related
+
+- RENDER-002 (headless rendering) — `Obj/ObjDraw` callbacks, `XObjReadWrite`,
+  and `WED_FacadePreview` are the reusable core; `XPTools/ViewObj.cpp` is a
+  headless-render template
+- GATEWAY-001 — `WED_GatewayImport` is the reference for reading Gateway data
+- ASSET-001 (expanded asset placement) — `WED_LibraryMgr` port enables handling
+  obj/pol/lin/str/agp asset types beyond the current facade/forest
+- `catalog.py` library resolution — `WED_LibraryMgr` is the reference/port source
