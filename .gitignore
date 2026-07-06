@@ -21,3 +21,16 @@ session-environment.sh
 # Kiro session files
 orig-context.txt
 .kiro/
+
+# MacOS
+.DS_Store/
+
+# Session saves
+*-session.json
+
+# Build work
+green_bank/
+pocahontas/
+arbovale_subset/
+green_bank_subset/
+tools/
