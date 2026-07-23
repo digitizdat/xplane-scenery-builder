@@ -219,3 +219,59 @@ def review(queue: str, output: str) -> None:
     from xplane_gen.review import run_review
 
     run_review(queue, output)
+
+
+@cli.command("install")
+@click.option("--pack", required=True, help="Path to the generated scenery pack folder.")
+@click.option("--name", default=None, help="Custom Scenery folder name (default: pack name).")
+@click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
+@click.option(
+    "--position",
+    type=click.Choice(["above-global", "below-global", "top"]),
+    default="above-global",
+    show_default=True,
+    help="Placement vs *GLOBAL_AIRPORTS* (overlays above, base meshes below).",
+)
+@click.option("--force", is_flag=True, help="Replace an existing pack of the same name.")
+def install(
+    pack: str, name: str | None, xplane_path: str | None, position: str, force: bool
+) -> None:
+    """Install a generated overlay pack into X-Plane's Custom Scenery."""
+    from xplane_gen.scenery_install import SceneryInstallError, install_pack
+
+    try:
+        dest = install_pack(pack, xplane_path, name, position, force=force)
+    except SceneryInstallError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
+    console.print(f"[green]Installed to {dest}[/green]")
+    console.print("Restart X-Plane 12 to load the new scenery.")
+
+
+@cli.command("uninstall")
+@click.option("--name", required=True, help="Pack folder name under Custom Scenery.")
+@click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
+@click.option("--keep-files", is_flag=True, help="Remove the ini entry but keep the files.")
+@click.option("--yes", is_flag=True, help="Skip the deletion confirmation prompt.")
+def uninstall(name: str, xplane_path: str | None, keep_files: bool, yes: bool) -> None:
+    """Remove a pack's files and its scenery_packs.ini entry."""
+    from xplane_gen.scenery_install import SceneryInstallError, uninstall_pack
+
+    delete_files = not keep_files
+    prompt = f"Delete Custom Scenery/{name}/ and remove its scenery_packs.ini entry?"
+    if delete_files and not yes and not click.confirm(prompt):
+        console.print("Aborted.")
+        return
+    try:
+        removed_line, removed_files = uninstall_pack(name, xplane_path, delete_files=delete_files)
+    except SceneryInstallError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
+    if not removed_line and not removed_files:
+        console.print(f"[yellow]Nothing to remove for '{name}'.[/yellow]")
+        return
+    if removed_line:
+        console.print(f"[green]Removed scenery_packs.ini entry for '{name}'.[/green]")
+    if removed_files:
+        console.print(f"[green]Deleted Custom Scenery/{name}/.[/green]")
+    console.print("Restart X-Plane 12 for the change to take effect.")

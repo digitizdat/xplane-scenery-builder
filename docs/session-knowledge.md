@@ -33,6 +33,17 @@ Automated X-Plane 12 overlay scenery pack generator. Takes a lat/lon bbox, fetch
 - `EXPORT_SEASON` variants are valid (resolved at runtime by X-Plane)
 - Validate with: `uv run xplane-gen catalog validate --xplane-path "/path/to/X-Plane 12"`
 
+### Scenery Pack Prioritization (scenery_packs.ini)
+- Official guidance: https://www.x-plane.com/kb/prioritization-scenery-packs/
+- File: `Custom Scenery/scenery_packs.ini`. Header is three lines: `I`, `1000 Version`, `SCENERY`, then a blank line, then `SCENERY_PACK <path>/` entries (trailing slash).
+- Load order = priority: entries at the TOP are loaded first and override packs below them.
+- The default global airports appear as the literal marker line `SCENERY_PACK *GLOBAL_AIRPORTS*`.
+- Rule (from the KB): Global Airports must be higher priority than any base meshes but lower priority than custom airports. So the canonical order is: custom airports/overlays → `*GLOBAL_AIRPORTS*` → base meshes. Our overlay packs (buildings/forests/draped ortho) belong ABOVE `*GLOBAL_AIRPORTS*`.
+- Disable a pack in place with `SCENERY_PACK_DISABLED <path>/` instead of deleting the line (reversible; documented by Laminar).
+- Auto-add: X-Plane adds any pack not yet in the .ini on launch. The KB (X-Plane 10 era) says "to the top"; X-Plane 12 was observed (2026-07-23) to insert a new pack just ABOVE `*GLOBAL_AIRPORTS*`, not at the very top. A full restart is required to pick up new packs.
+- Do NOT delete/rebuild scenery_packs.ini or rename default packs — the updater restores them.
+- Install gotcha (observed 2026-07-23): a pack must be `Custom Scenery/<name>/Earth nav data/+NN-NNN/*.dsf`. Copying with `cp -r "Earth nav data" dest/` when `dest` does not exist makes `dest` a rename of "Earth nav data", dropping the `Earth nav data` level — X-Plane then registers the pack but loads no DSF (no error, no load line). Verify the `Earth nav data` folder level exists.
+
 ### Overpass API
 - Must send User-Agent header (406 without it)
 - Use `urllib.request.Request` directly — `overpy` library doesn't support custom headers
