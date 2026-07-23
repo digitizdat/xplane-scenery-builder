@@ -167,7 +167,7 @@ class DsfWriter:
 
         for facade in self.facades:
             idx = len(forest_resources) + facade_resources.index(facade.resource)
-            coords = _ensure_ccw(facade.coords)
+            coords = _open_ring(_ensure_ccw(facade.coords))
             lines += [
                 f"BEGIN_POLYGON {idx} {int(facade.height)} 2",
                 "BEGIN_WINDING",
@@ -208,6 +208,19 @@ def _ensure_ccw(coords: list[Coord]) -> list[Coord]:
     ring = LinearRing(coords)
     if not ring.is_ccw:
         return list(reversed(coords))
+    return coords
+
+
+def _open_ring(coords: list[Coord]) -> list[Coord]:
+    """Drop a duplicated closing vertex.
+
+    X-Plane closes facade windings implicitly. A repeated first/last point
+    (as GeoJSON rings carry) becomes a zero-length wall segment for ring
+    facades, which fails the facade's wall-width match and can prevent the
+    facade from rendering (see RENDER-001).
+    """
+    if len(coords) > 1 and coords[0] == coords[-1]:
+        return coords[:-1]
     return coords
 
 

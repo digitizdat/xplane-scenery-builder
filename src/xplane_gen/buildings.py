@@ -10,11 +10,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from shapely.geometry import shape
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, shape
+from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
 
 from xplane_gen.catalog import AssetCatalog
-from xplane_gen.dsf import ExclusionZone, FacadeFeature, _building_height, _geom_to_coords
+from xplane_gen.dsf import ExclusionZone, FacadeFeature, _building_height
 
 
 def buildings_to_facades(
@@ -34,13 +35,18 @@ def buildings_to_facades(
         if geom.get("type") != "Polygon":
             continue
 
-        coords = _geom_to_coords(geom)
-        if len(coords) < 3:
+        rings = geom.get("coordinates") or []
+        if not rings or len(rings[0]) < 4:
             continue
 
-        # Validate and repair geometry
+        # Validate and repair geometry, then emit the repaired outer ring so
+        # self-intersecting or mis-wound OSM footprints reach X-Plane as a
+        # clean simple polygon (see RENDER-001).
         shp = make_valid(shape(geom))
         if shp.is_empty:
+            continue
+        coords = _exterior_coords(shp)
+        if len(coords) < 3:
             continue
 
         btype: str = str(props.get("building", "generic"))
@@ -71,6 +77,25 @@ def building_exclusion_zones(tile_west: int, tile_south: int) -> list[ExclusionZ
         ExclusionZone("obj", w, s, e, n),
         ExclusionZone("fac", w, s, e, n),
     ]
+
+
+def _exterior_coords(geom: BaseGeometry) -> list[tuple[float, float]]:
+    """Return the outer ring of a repaired geometry as (lon, lat) tuples.
+
+    ``make_valid`` can turn a self-intersecting footprint into a MultiPolygon
+    or GeometryCollection; pick the largest Polygon so a single simple outer
+    ring is emitted.
+    """
+    if isinstance(geom, Polygon):
+        polys = [geom]
+    elif isinstance(geom, (MultiPolygon, GeometryCollection)):
+        polys = [g for g in geom.geoms if isinstance(g, Polygon)]
+    else:
+        polys = []
+    if not polys:
+        return []
+    largest = max(polys, key=lambda p: p.area)
+    return [(float(c[0]), float(c[1])) for c in largest.exterior.coords]
 
 
 def _m2_per_deg2(lat: float) -> float:

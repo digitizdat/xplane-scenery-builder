@@ -10,11 +10,13 @@ from shapely.geometry import LinearRing
 from xplane_gen.dsf import (
     DsfWriter,
     ExclusionZone,
+    FacadeFeature,
     ForestFeature,
     _building_height,
     _dsf_path,
     _ensure_ccw,
     _geom_to_coords,
+    _open_ring,
     _polygon_area_m2,
     build_overlay,
 )
@@ -65,6 +67,32 @@ def test_ensure_ccw_already_ccw() -> None:
 def test_ensure_ccw_flips_cw() -> None:
     cw = [(-122.6, 47.7), (-122.5, 47.7), (-122.5, 47.6), (-122.6, 47.6), (-122.6, 47.7)]
     assert LinearRing(_ensure_ccw(cw)).is_ccw
+
+
+def test_open_ring_strips_closing_vertex() -> None:
+    closed = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]
+    assert _open_ring(closed) == [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+
+
+def test_open_ring_leaves_open_ring_unchanged() -> None:
+    open_ring = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+    assert _open_ring(open_ring) == open_ring
+
+
+def test_facade_winding_drops_closing_vertex() -> None:
+    """Facade windings must not repeat the first point (RENDER-001)."""
+    closed = [(-122.6, 47.6), (-122.5, 47.6), (-122.5, 47.7), (-122.6, 47.7), (-122.6, 47.6)]
+    w = DsfWriter(tile_west=-123, tile_south=47)
+    w.add_facade(
+        FacadeFeature(
+            resource="lib/buildings/facades/generic/mid_modern_01.fac",
+            height=10.0,
+            coords=closed,
+        )
+    )
+    pts = [ln for ln in w._render().splitlines() if ln.startswith("POLYGON_POINT")]
+    assert len(pts) == 4  # 5-point closed ring collapses to 4 open points
+    assert pts[0] != pts[-1]
 
 
 def test_compile_calls_dsftool(tmp_path: Path) -> None:
