@@ -30,3 +30,23 @@ Ports the OBJ8 read grammar from WED's MIT-licensed `Obj/XObjReadWrite.cpp`.
   `ATTR_LOD_draped` takes one argument, unlike `ATTR_LOD near far`.
 
 Run: `python3 spikes/obj8_parser.py <path-to.obj>`
+
+### `render001_single_facade.py` — are missing buildings caused by facade selection? (RENDER-001)
+
+Builds a Green Bank scenery pack that places every OSM building on one permissive
+facade (`high_universal_01.fac`, all-heading walls) with the ortho draped
+underneath as a ground reference, so building presence can be checked in-sim.
+
+- **Q1. Do buildings render when forced onto a permissive facade?** Yes — they
+  render across the tile. But this changed two variables at once (it also applied
+  the 2a closing-vertex fix), so it did NOT by itself prove facade selection was
+  the cause.
+- **Outcome.** RENDER-001 was ultimately traced to the duplicate closing vertex
+  (fix 2a), not facade selection — confirmed by a follow-up re-test that kept the
+  original selection and applied only 2a. See `docs/session-knowledge.md`
+  "Facade Rendering / RENDER-001".
+- **Lasting value.** Kept as an instructional example: resolving library facade
+  paths, forcing a facade, draping ortho `.pol` tiles, and compiling a DSF pack
+  end to end.
+
+Run: `python3 spikes/render001_single_facade.py`
