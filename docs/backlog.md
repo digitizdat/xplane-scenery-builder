@@ -29,6 +29,7 @@
     - [REFINE-001 — Closed-loop scenery refinement via render-and-compare](#refine-001--closed-loop-scenery-refinement-via-render-and-compare)
     - [GATEWAY-001 — Explore X-Plane Scenery Gateway API as a data source](#gateway-001--explore-x-plane-scenery-gateway-api-as-a-data-source)
     - [WED-001 — Explore reusing or building on the WorldEditor (WED) codebase](#wed-001--explore-reusing-or-building-on-the-worldeditor-wed-codebase)
+    - [SOURCE-001 — Supplement OSM with additional building footprint sources](#source-001--supplement-osm-with-additional-building-footprint-sources)
 
 ---
 
@@ -451,32 +452,40 @@ The tiered routing (Haiku → Sonnet → Opus) escalates too aggressively:
 
 ### RENDER-001 — Missing buildings investigation
 
-**Status**: Proposed  
-**Priority**: High  
+**Status**: Resolved (2026-07-23)
+**Priority**: High
 **Source**: Green Bank test — "many (not all) buildings appearing"
 
-#### Problem
+#### Resolution
+
+Root cause: the DSF facade windings repeated the ring's first point as the last
+vertex. For ring facades X-Plane treats every ring point as a wall start, so the
+duplicate became a zero-length wall that broke spelling on essentially every
+building — presenting in-sim as "many but not all" rendering. Fixed by stripping
+the closing vertex at facade emission (`dsf._open_ring`, "2a"). A second latent
+defect was also fixed: `buildings_to_facades` computed `make_valid()` but emitted
+the raw ring; it now emits the repaired outer ring ("2b"). Both committed.
+
+Verified: re-emitting the original per-building facade selection through the
+2a-fixed writer rendered all buildings in-sim, isolating 2a as the cause. Facade
+selection / wall-width / heading spelling was investigated and ruled out (a
+heading-aware spelling predicate reproduced only 1/167 drops on the real
+assignments). See docs/session-knowledge.md "Facade Rendering / RENDER-001".
+
+Note: buildings that exist in reality but never appear are a separate OSM
+source-coverage gap (see SOURCE-001), not a render issue.
+
+#### Problem (original)
 
 Some buildings in the DSF don't render in X-Plane despite being present in
 the compiled file. The DSF loads without errors and shows facades for most
 buildings but not all.
 
-#### Possible causes
+#### Investigation outcome
 
-1. **Polygon winding**: some buildings may have CW winding despite `_ensure_ccw`
-   (edge case with self-intersecting or degenerate polygons)
-2. **Zero-area polygons**: very small buildings may collapse to zero area after
-   coordinate quantization in DSFTool
-3. **Facade compatibility**: some facade `.fac` files may not support the
-   height range we're requesting
-4. **Object density**: despite `sim/require_facade 1/0`, some may still be
-   culled
-
-#### Investigation steps
-
-- Decompile DSF and count facade polygons vs buildings in GeoJSON
-- Check which specific buildings are missing (compare in-sim vs OSM)
-- Test with a single known-good facade type for all buildings
+- Decompile confirmed 167 GeoJSON buildings -> 167 facades in the compiled DSF (no pipeline/DSFTool loss).
+- Cause was the zero-length wall from the duplicate closing vertex, not winding, zero-area, facade compatibility, or object density.
+- The single-known-good-facade test was a confound (it also applied the 2a fix); the clean re-test with original selection + 2a confirmed the fix.
 
 ---
 
@@ -872,3 +881,46 @@ GUI-independent, and porting keeps the project pure-Python.
 - ASSET-001 (expanded asset placement) — `WED_LibraryMgr` port enables handling
   obj/pol/lin/str/agp asset types beyond the current facade/forest
 - `catalog.py` library resolution — `WED_LibraryMgr` is the reference/port source
+
+---
+
+## SOURCE-001 — Supplement OSM with additional building footprint sources
+
+**Status**: Proposed
+**Priority**: Medium
+**Source**: Green Bank observation — real buildings absent from the scenery
+
+### Problem
+
+Buildings are placed solely from OpenStreetMap footprints, which are volunteered
+data traced by contributors. Coverage is uneven and, in rural areas like Green
+Bank, incomplete: many real buildings are simply not in OSM, so they never enter
+the pipeline. This is a source-data completeness gap, not a rendering issue
+(distinct from RENDER-001, which was resolved). Also, `osm.py` currently only
+processes `way` buildings and skips building `relation`s (multipolygons), so
+courtyard/complex buildings are dropped at extraction.
+
+### Possible approaches
+
+1. **Add a second footprint source**: Microsoft Building Footprints (ML-derived,
+   US-wide, openly licensed) is far more complete in rural areas. Merge with OSM,
+   de-duplicating overlaps. Confirm license terms before distributing output.
+2. **ML detection on imagery we already fetch**: run building-footprint
+   segmentation on the NAIP/Sentinel ortho tiles to detect unmapped buildings.
+   Self-contained but higher effort and needs de-duplication against OSM.
+3. **County / USGS GIS**: some jurisdictions publish authoritative building or
+   parcel data.
+
+### Also in scope
+
+- Handle OSM building `relation`s (multipolygons) in `osm.py._extract_features`,
+  which currently iterates only `result.ways`.
+
+### Dependencies
+
+- Ortho tiles (ORTHO-001) — implemented (for approach 2)
+- De-duplication logic to merge sources without double-placing buildings
+
+### Complexity
+
+Medium for a second vector source with de-dup; higher for ML detection.
