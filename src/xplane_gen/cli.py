@@ -8,12 +8,12 @@ from rich.console import Console
 console = Console()
 
 
-@click.group()
+@click.group(context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 def cli() -> None:
     """X-Plane GenAI Scenery Generator."""
 
 
-@cli.command("spike")
+@cli.command("spike", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--output", default="./spike_output", show_default=True)
 @click.option("--dsftool", default=None, help="Path to DSFTool binary.")
 def spike(output: str, dsftool: str | None) -> None:
@@ -51,7 +51,7 @@ def spike(output: str, dsftool: str | None) -> None:
     )
 
 
-@cli.command("fetch-osm")
+@cli.command("fetch-osm", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--bbox", required=True, help="lat_min,lon_min,lat_max,lon_max")
 @click.option("--output", default=".", show_default=True)
 def fetch_osm(bbox: str, output: str) -> None:
@@ -62,7 +62,7 @@ def fetch_osm(bbox: str, output: str) -> None:
     fetch_tile(lat_min, lon_min, lat_max, lon_max, output)
 
 
-@cli.command("classify-land")
+@cli.command("classify-land", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--bbox", required=True, help="lat_min,lon_min,lat_max,lon_max")
 @click.option("--output", default=".", show_default=True)
 def classify_land(bbox: str, output: str) -> None:
@@ -73,7 +73,7 @@ def classify_land(bbox: str, output: str) -> None:
     classify_tile(lat_min, lon_min, lat_max, lon_max, output)
 
 
-@cli.command("generate")
+@cli.command("generate", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--bbox", default=None, help="lat_min,lon_min,lat_max,lon_max")
 @click.option("--placename", default=None, help="Place name to geocode (e.g. 'Green Bank, WV').")
 @click.option("--output", default="./output", show_default=True)
@@ -151,7 +151,7 @@ def generate(
     proc.run()
 
 
-@cli.command("catalog")
+@cli.command("catalog", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.argument("subcommand", type=click.Choice(["validate"]))
 @click.option("--xplane-path", default=None)
 def catalog(subcommand: str, xplane_path: str | None) -> None:
@@ -172,7 +172,7 @@ def catalog(subcommand: str, xplane_path: str | None) -> None:
             )
 
 
-@cli.command("subset")
+@cli.command("subset", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--source", required=True, help="Path to existing scenery output folder.")
 @click.option("--bbox", default=None, help="lat_min,lon_min,lat_max,lon_max")
 @click.option("--placename", default=None, help="Place name to geocode for subset bbox.")
@@ -220,7 +220,7 @@ def subset(
     )
 
 
-@cli.command("review")
+@cli.command("review", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--queue", default="review_queue.json", show_default=True)
 @click.option("--output", default="resolved_queue.json", show_default=True)
 def review(queue: str, output: str) -> None:
@@ -230,7 +230,7 @@ def review(queue: str, output: str) -> None:
     run_review(queue, output)
 
 
-@cli.command("install")
+@cli.command("install", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--pack", required=True, help="Path to the generated scenery pack folder.")
 @click.option("--name", default=None, help="Custom Scenery folder name (default: pack name).")
 @click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
@@ -257,7 +257,7 @@ def install(
     console.print("Restart X-Plane 12 to load the new scenery.")
 
 
-@cli.command("uninstall")
+@cli.command("uninstall", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
 @click.option("--name", required=True, help="Pack folder name under Custom Scenery.")
 @click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
 @click.option("--keep-files", is_flag=True, help="Remove the ini entry but keep the files.")
