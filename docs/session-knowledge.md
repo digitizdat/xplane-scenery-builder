@@ -67,6 +67,13 @@ Wall headings are RELATIVE, not absolute azimuth. WALL rules are `WALL min_len m
 - Source: WED_FacadePreview.cpp (`in_heading_in_range`, `REN_facade_wall_filter_t::is_ok`, `facRot`); WED_ResourceMgr.cpp (WALL parse, min_heading/max_heading ~lines 826-851); WED_PreviewLayer.cpp (`choices`).
 - Confidence: confirmed from WED source that the heading is relative, in degrees, wrapped, with a facade-local orientation frame. NOT traced line-by-line: the exact zero-reference for each segment's rel_hdg. Verify before any future spelling predicate depends on it.
 
+### OSM Building Coverage (SOURCE-001)
+- Buildings come only from OSM (volunteered, hand-traced). Coverage is uneven and often sparse in rural areas; missing real-world buildings are usually absent from OSM, not dropped by our pipeline (distinct from RENDER-001).
+- Measured gap (Green Bank bbox, 2026-07-24, `spikes/source001_osm_gap.py`): OSM 167 vs Microsoft US Building Footprints 652 (~4x); ~79% estimated OSM miss rate; MS covers ~2.4x the footprint area. MS footprints are ODbL (same corpus as Planetary Computer `ms-buildings`).
+- MS-vs-OSM systematic offset is negligible (median (dx,dy)=(+0.3,-0.5) m, 0.6 m over 148 pairs), so MS footprints can be placed as-is; no alignment step needed. Ortho alignment stays a separate non-systematic ALIGN-001 concern for both sources.
+- `osm.py._extract_features` iterates only `result.ways`, so building `relation`s (multipolygons) are skipped at extraction — a second, separate source of absent buildings.
+- Imagery/licensing note: MS footprints (the ML *output*) are ODbL and usable; the *source* imagery (Bing/Maxar/Airbus) is proprietary and NOT redistributable, so it cannot be used as shippable ortho. NAIP (public domain) and Sentinel-2 (free) are used precisely because they are redistributable.
+
 ### Overpass API
 - Must send User-Agent header (406 without it)
 - Use `urllib.request.Request` directly — `overpy` library doesn't support custom headers

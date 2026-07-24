@@ -16,6 +16,7 @@ console = Console()
 
 STAGES = [
     "fetch_osm",
+    "merge_buildings",
     "fetch_rasters",
     "annotate",
     "fetch_ortho",
@@ -43,6 +44,7 @@ class TileProcessor:
         review_all: bool = False,
         no_roads: bool = False,
         workers: int = 5,
+        buildings_mode: str = "osm",
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -56,6 +58,7 @@ class TileProcessor:
         self.review_all = review_all
         self.no_roads = no_roads
         self.workers = workers
+        self.buildings_mode = buildings_mode
 
         # Tile SW corner (integer degrees)
         self.tile_west = int(math.floor(lon_min))
@@ -120,6 +123,19 @@ class TileProcessor:
             self.lon_max,
             str(self.output_dir),
         )
+
+    def _stage_merge_buildings(self) -> None:
+        """Supplement OSM buildings with Microsoft footprints (opt-in via buildings_mode)."""
+        if self.buildings_mode != "osm+ms":
+            return
+        from xplane_gen.msbuildings import MsBuildingsError, supplement_with_ms
+
+        try:
+            supplement_with_ms(
+                self.lat_min, self.lon_min, self.lat_max, self.lon_max, self.output_dir
+            )
+        except MsBuildingsError as exc:
+            console.print(f"[yellow]MS footprints skipped: {exc}[/yellow]")
 
     def _stage_fetch_rasters(self) -> None:
         from xplane_gen.landcover import classify_tile
@@ -403,7 +419,7 @@ class TileProcessor:
     # State persistence                                                    #
     # ------------------------------------------------------------------ #
 
-    _FETCH_STAGES = {"fetch_osm", "fetch_rasters", "fetch_ortho", "annotate"}
+    _FETCH_STAGES = {"fetch_osm", "merge_buildings", "fetch_rasters", "fetch_ortho", "annotate"}
 
     def _reset_to_cached_data(self) -> None:
         """Keep only fetch stages as completed, forcing regeneration from cached data."""

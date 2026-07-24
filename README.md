@@ -80,6 +80,7 @@ fetch_osm → fetch_rasters → annotate → fetch_ortho → classify → review
 | `--review-all` | Force all LLM classifications to human review |
 | `--no-roads` | Suppress default road network in ortho areas |
 | `--workers N` | Parallel workers for ortho fetch and Bedrock classify (default: 5) |
+| `--buildings osm\|osm+ms` | Building sources: OSM only (default), or supplement with Microsoft US Building Footprints to fill rural coverage gaps (US only) |
 
 ### Install the output in X-Plane
 

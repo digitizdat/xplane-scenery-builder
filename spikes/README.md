@@ -50,3 +50,16 @@ underneath as a ground reference, so building presence can be checked in-sim.
   end to end.
 
 Run: `python3 spikes/render001_single_facade.py`
+
+### `source001_osm_gap.py` — how much is OSM missing vs Microsoft footprints? (SOURCE-001)
+
+Downloads Microsoft US Building Footprints (ODbL) for West Virginia, clips to the
+Green Bank bbox, and compares against our OSM `buildings.geojson`: counts,
+footprint area, and spatial recall (MS buildings with an OSM building within 15 m,
+tolerant of the OSM-vs-imagery offset).
+
+- **Q1. How large is the OSM coverage gap for Green Bank?** OSM 167 vs MS 652
+  (~4x); ~79% estimated OSM miss rate; MS covers ~2.4x the footprint area. The
+  missing buildings are an OSM source-coverage gap, not a render issue.
+
+Run: `uv run --with geopandas --with pyogrio python spikes/source001_osm_gap.py`

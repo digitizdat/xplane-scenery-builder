@@ -90,6 +90,13 @@ def classify_land(bbox: str, output: str) -> None:
 @click.option("--review-all", is_flag=True, help="Force human review of all LLM classifications.")
 @click.option("--no-roads", is_flag=True, help="Suppress default road network in ortho areas.")
 @click.option("--workers", default=5, show_default=True, help="Parallel Bedrock workers.")
+@click.option(
+    "--buildings",
+    type=click.Choice(["osm", "osm+ms"]),
+    default="osm",
+    show_default=True,
+    help="Building sources: osm only, or osm+ms to supplement with Microsoft footprints (US only).",
+)
 def generate(
     bbox: str | None,
     placename: str | None,
@@ -102,6 +109,7 @@ def generate(
     review_all: bool,
     no_roads: bool,
     workers: int,
+    buildings: str,
 ) -> None:
     """Task 8: End-to-end tile generation pipeline."""
     from pathlib import Path
@@ -138,6 +146,7 @@ def generate(
         review_all=review_all,
         no_roads=no_roads,
         workers=workers,
+        buildings_mode=buildings,
     )
     proc.run()
 

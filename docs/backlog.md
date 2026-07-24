@@ -886,9 +886,31 @@ GUI-independent, and porting keeps the project pure-Python.
 
 ## SOURCE-001 — Supplement OSM with additional building footprint sources
 
-**Status**: Proposed
+**Status**: Partially implemented (2026-07-24)
 **Priority**: Medium
 **Source**: Green Bank observation — real buildings absent from the scenery
+
+### Implemented
+
+Microsoft US Building Footprints (ODbL) as an opt-in second source via
+`--buildings osm+ms` (`msbuildings.py` + `merge_buildings` pipeline stage).
+Reverse-geocodes the bbox to a US state, downloads/caches that state's
+footprints, reads the bbox subset with pyogrio (bundled GDAL, no geopandas),
+de-duplicates against OSM (shapely STRtree, 2 m buffer; OSM wins), and merges
+gap-fillers into `buildings.geojson` tagged `xplane_source=ms` (idempotent).
+Placed as-is — measured MS-vs-OSM offset is ~0.6 m. On Green Bank: 167 -> 700
+buildings.
+
+### Remaining follow-ups
+
+- ODbL attribution in the output pack (both OSM and MS) — a distribution
+  requirement not yet emitted.
+- Handle OSM building `relation`s (multipolygons) in `osm.py._extract_features`
+  (currently `way`-only), a separate source of dropped buildings.
+- International coverage (GlobalMLBuildingFootprints, per-quadkey) — current
+  support is US-only per-state files.
+- NAIP-based building detection: detect footprints from the same imagery we
+  drape as ortho, which would also fix alignment (ALIGN-001) by construction.
 
 ### Problem
 
@@ -899,6 +921,19 @@ the pipeline. This is a source-data completeness gap, not a rendering issue
 (distinct from RENDER-001, which was resolved). Also, `osm.py` currently only
 processes `way` buildings and skips building `relation`s (multipolygons), so
 courtyard/complex buildings are dropped at extraction.
+
+### Measured gap (Green Bank bbox, 2026-07-24)
+
+Measured with `spikes/source001_osm_gap.py` against Microsoft US Building
+Footprints (ODbL): OSM 167 buildings vs MS 652 (~4x); footprint area 51,506 m2
+vs 121,465 m2; only 138/652 MS buildings have an OSM building within 15 m, i.e.
+~79% estimated OSM miss rate. MS is ML-derived (<1% false positives per MS), so
+this is an estimate, but the gap is large and real.
+
+MS-vs-OSM systematic offset is negligible (median (dx,dy)=(+0.3,-0.5) m, 0.6 m
+magnitude over 148 pairs), so MS footprints can be placed as-is with no
+alignment step. Ortho alignment remains a separate, non-systematic ALIGN-001
+concern that applies equally to OSM and MS.
 
 ### Possible approaches
 
