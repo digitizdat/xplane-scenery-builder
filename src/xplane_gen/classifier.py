@@ -6,12 +6,13 @@ import base64
 import hashlib
 import io
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import boto3
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from rich.console import Console
 
 console = Console()
@@ -161,6 +162,7 @@ class BedrockClassifier:
     def classify_building(self, image: np.ndarray, osm_tags: dict[str, str]) -> dict[str, Any]:
         """Classify a building's physical appearance from satellite imagery."""
         prompt = (
+            "The building to classify is outlined with a red rectangle; the rest is context.\n"
             "Describe this building's physical appearance from the satellite image.\n"
             "Determine: number of stories, wall material, wall color, "
             "window density (none/sparse/moderate/dense/curtain_wall), "
@@ -187,6 +189,7 @@ class BedrockClassifier:
     def classify_forest(self, image: np.ndarray, esa_label: str, ndvi: float) -> dict[str, Any]:
         """Classify forest composition. Returns {species_mix, canopy_density, confidence}."""
         prompt = (
+            "The area to classify is outlined with a red rectangle; the rest is context.\n"
             "Identify the forest type from this satellite image.\n"
             f"ESA land cover class: {esa_label}\n"
             f"NDVI density: {ndvi:.2f}\n"
@@ -207,6 +210,7 @@ class BedrockClassifier:
     def classify_road(self, image: np.ndarray, osm_tags: dict[str, str]) -> dict[str, Any]:
         """Classify road surface. Returns {surface_type, lane_count, confidence}."""
         prompt = (
+            "The road to classify is outlined with a red rectangle; the rest is context.\n"
             "Identify the road surface type from this satellite image.\n"
             f"OSM tags: {_fmt_tags(osm_tags)}\n"
             "Use the classify_road tool."
@@ -353,60 +357,77 @@ class BedrockClassifier:
 def crop_patch(
     image_dir: Path,
     bbox: tuple[float, float, float, float],
-    tile_bbox: tuple[float, float, float, float],
-    size: int = 256,
+    tile_bbox: tuple[float, float, float, float],  # noqa: ARG001 — kept for API compatibility
+    size: int = 384,
+    context_m: float = 80.0,
 ) -> np.ndarray | None:
-    """Crop a satellite image patch for the given feature bbox.
+    """Crop a satellite patch with surrounding context and mark the feature.
 
-    Looks for ortho tiles first, falls back to a blank patch if unavailable.
-    Returns an (size, size, 3) uint8 array or None if no imagery.
+    Crops at least ``context_m`` metres square centred on the feature (larger for
+    big features) so the model and the human reviewer see the surroundings, then
+    outlines the feature with a red rectangle. Geo-referencing uses the .pol
+    SCALE (true metre extent) and cos(lat) longitude scaling, matching how the
+    ortho is placed in the DSF. Returns an (size, size, 3) uint8 array, or None
+    if no ortho imagery covers the feature.
     """
     ortho_dir = image_dir / "orthophoto"
     if not ortho_dir.exists() or not list(ortho_dir.glob("*.png")):
         return None
 
     feat_lon_min, feat_lat_min, feat_lon_max, feat_lat_max = bbox
-    tile_lon_min, tile_lat_min, tile_lon_max, tile_lat_max = tile_bbox
-
-    # Find the ortho tile that contains the feature centroid
     cx = (feat_lon_min + feat_lon_max) / 2
     cy = (feat_lat_min + feat_lat_max) / 2
 
     for png in ortho_dir.glob("*.png"):
-        # Tiles are named row_col.png; read the matching .pol for geo bounds
         pol = png.with_suffix(".pol")
         if not pol.exists():
             continue
-        # Parse LOAD_CENTER from .pol to determine tile coverage
-        pol_text = pol.read_text(encoding="utf-8")
-        for line in pol_text.splitlines():
-            if line.startswith("LOAD_CENTER"):
-                parts = line.split()
-                if len(parts) >= 5:
-                    plat, plon = float(parts[1]), float(parts[2])
-                    h_m, w_m = float(parts[3]), float(parts[4])
-                    # Approximate degree extent
-                    h_deg = h_m / 111_320.0
-                    w_deg = w_m / 111_320.0
-                    if abs(cy - plat) < h_deg / 2 and abs(cx - plon) < w_deg / 2:
-                        img = Image.open(png)
-                        # Crop the feature's portion
-                        img_w, img_h = img.size
-                        # Pixel coords relative to tile
-                        px_left = (feat_lon_min - (plon - w_deg / 2)) / w_deg * img_w
-                        px_top = ((plat + h_deg / 2) - feat_lat_max) / h_deg * img_h
-                        px_right = (feat_lon_max - (plon - w_deg / 2)) / w_deg * img_w
-                        px_bottom = ((plat + h_deg / 2) - feat_lat_min) / h_deg * img_h
-                        # Clamp and add buffer
-                        buf = max(px_right - px_left, px_bottom - px_top) * 0.2
-                        crop_box = (
-                            max(0, int(px_left - buf)),
-                            max(0, int(px_top - buf)),
-                            min(img_w, int(px_right + buf)),
-                            min(img_h, int(px_bottom + buf)),
-                        )
-                        patch = img.crop(crop_box).resize((size, size))
-                        return np.array(patch)[:, :, :3]
+        plat = plon = w_m = h_m = None
+        for line in pol.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if line.startswith("SCALE") and len(parts) >= 3:
+                w_m, h_m = float(parts[1]), float(parts[2])
+            elif line.startswith("LOAD_CENTER") and len(parts) >= 3:
+                plat, plon = float(parts[1]), float(parts[2])
+        if plat is None or plon is None or w_m is None or h_m is None:
+            continue
+
+        # Tile geographic extent (matches build_overlay's ortho placement)
+        w_deg = w_m / (111_320.0 * math.cos(math.radians(plat)))
+        h_deg = h_m / 111_320.0
+        if abs(cy - plat) >= h_deg / 2 or abs(cx - plon) >= w_deg / 2:
+            continue
+
+        img = Image.open(png).convert("RGB")
+        img_w, img_h = img.size
+        west = plon - w_deg / 2
+        north = plat + h_deg / 2
+        px_left = (feat_lon_min - west) / w_deg * img_w
+        px_right = (feat_lon_max - west) / w_deg * img_w
+        px_top = (north - feat_lat_max) / h_deg * img_h
+        px_bottom = (north - feat_lat_min) / h_deg * img_h
+
+        # Context window: at least context_m square, and at least 1.4x the feature.
+        win_x = max(context_m * img_w / w_m, (px_right - px_left) * 1.4)
+        win_y = max(context_m * img_h / h_m, (px_bottom - px_top) * 1.4)
+        mid_x = (px_left + px_right) / 2
+        mid_y = (px_top + px_bottom) / 2
+        left = max(0, int(mid_x - win_x / 2))
+        top = max(0, int(mid_y - win_y / 2))
+        right = min(img_w, int(mid_x + win_x / 2))
+        bottom = min(img_h, int(mid_y + win_y / 2))
+        if right - left < 2 or bottom - top < 2:
+            return None
+
+        patch = img.crop((left, top, right, bottom)).resize((size, size))
+
+        # Outline the feature with a red rectangle in the resized frame.
+        sx = size / (right - left)
+        sy = size / (bottom - top)
+        rx0, ry0 = (px_left - left) * sx, (px_top - top) * sy
+        rx1, ry1 = (px_right - left) * sx, (px_bottom - top) * sy
+        ImageDraw.Draw(patch).rectangle([rx0, ry0, rx1, ry1], outline=(255, 0, 0), width=3)
+        return np.array(patch)[:, :, :3]
 
     return None
 
