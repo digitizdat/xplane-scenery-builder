@@ -49,9 +49,9 @@ from xplane_gen.catalog import AssetCatalog  # noqa: E402
 from xplane_gen.dsf import DrapedPolygon, DsfWriter, FacadeFeature, find_dsftool  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
-BUILDINGS = REPO / "green_bank" / "buildings.geojson"
-ORTHO_SRC = REPO / "green_bank" / "orthophoto"
-OUT = REPO / "green_bank_render001_diag"
+BUILDINGS = REPO / "output" / "green_bank" / "buildings.geojson"
+ORTHO_SRC = REPO / "output" / "green_bank" / "orthophoto"
+OUT = REPO / "output" / "green_bank_render001_diag"
 PERMISSIVE_FACADE = "lib/buildings/facades/generic/high_universal_01.fac"
 TILE_WEST, TILE_SOUTH = -80, 38
 TILE_CENTRE_LAT, TILE_CENTRE_LON = 38.43, -79.83

@@ -37,7 +37,7 @@ from pathlib import Path
 import geopandas as gpd
 
 REPO = Path(__file__).resolve().parent.parent
-OSM = REPO / "green_bank" / "buildings.geojson"
+OSM = REPO / "output" / "green_bank" / "buildings.geojson"
 BBOX = (-79.9, 38.4, -79.8, 38.45)  # w, s, e, n
 WV_URL = (
     "https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/"

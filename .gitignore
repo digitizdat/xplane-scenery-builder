@@ -23,14 +23,13 @@ orig-context.txt
 .kiro/
 
 # MacOS
-.DS_Store/
+.DS_Store
 
 # Session saves
 *-session.json
 
-# Build work
-green_bank/
-pocahontas/
-arbovale_subset/
-green_bank_subset/
+# Generated output (scenery packs, tiles, diagnostics)
+output/
+
+# Local tools (e.g. DSFTool binary)
 tools/
