@@ -45,6 +45,7 @@ class TileProcessor:
         no_roads: bool = False,
         workers: int = 5,
         buildings_mode: str = "osm",
+        reclassify: bool = False,
     ) -> None:
         self.lat_min = lat_min
         self.lon_min = lon_min
@@ -69,6 +70,8 @@ class TileProcessor:
 
         if regen:
             self._reset_to_cached_data()
+        if reclassify:
+            self._reset_classification()
         if review_all:
             self._force_stage("review")
 
@@ -420,6 +423,35 @@ class TileProcessor:
     # ------------------------------------------------------------------ #
 
     _FETCH_STAGES = {"fetch_osm", "merge_buildings", "fetch_rasters", "fetch_ortho", "annotate"}
+
+    def _reset_classification(self) -> None:
+        """Clear classification results and queues so the classify stage re-runs.
+
+        Strips ``xplane_*`` result properties from the feature GeoJSONs (keeping
+        ``xplane_source`` provenance), deletes the review/resolved queues, and
+        un-marks the classify/review/write_dsf/validate stages so a re-run
+        reclassifies from scratch. Cached fetch/ortho data is preserved.
+        """
+        cleared = 0
+        for name in ("buildings.geojson", "landcover.geojson", "roads.geojson"):
+            path = self.output_dir / name
+            if not path.exists():
+                continue
+            fc = json.loads(path.read_text(encoding="utf-8"))
+            for feat in fc.get("features", []):
+                props = feat.get("properties", {})
+                for key in [k for k in props if k.startswith("xplane_") and k != "xplane_source"]:
+                    del props[key]
+                    cleared += 1
+            path.write_text(json.dumps(fc, indent=2), encoding="utf-8")
+        for name in ("review_queue.json", "resolved_queue.json"):
+            (self.output_dir / name).unlink(missing_ok=True)
+        for stage in ("classify", "review", "write_dsf", "validate"):
+            self._force_stage(stage)
+        console.print(
+            f"[cyan]Reclassify: cleared {cleared} xplane_* properties and review queues; "
+            "classify will re-run.[/cyan]"
+        )
 
     def _reset_to_cached_data(self) -> None:
         """Keep only fetch stages as completed, forcing regeneration from cached data."""

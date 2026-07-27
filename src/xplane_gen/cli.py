@@ -87,6 +87,11 @@ def classify_land(bbox: str, output: str) -> None:
     help="Satellite imagery source for orthophoto ground texture. Omit to skip.",
 )
 @click.option("--regen", is_flag=True, help="Regenerate from cached data without re-downloading.")
+@click.option(
+    "--reclassify",
+    is_flag=True,
+    help="Clear existing classifications and review queues, then re-run classify from scratch.",
+)
 @click.option("--review-all", is_flag=True, help="Force human review of all LLM classifications.")
 @click.option("--no-roads", is_flag=True, help="Suppress default road network in ortho areas.")
 @click.option("--workers", default=5, show_default=True, help="Parallel Bedrock workers.")
@@ -106,6 +111,7 @@ def generate(
     dsftool: str | None,
     ortho_source: str | None,
     regen: bool,
+    reclassify: bool,
     review_all: bool,
     no_roads: bool,
     workers: int,
@@ -147,6 +153,7 @@ def generate(
         no_roads=no_roads,
         workers=workers,
         buildings_mode=buildings,
+        reclassify=reclassify,
     )
     proc.run()
 

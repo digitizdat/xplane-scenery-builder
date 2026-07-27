@@ -143,3 +143,44 @@ def test_validate_stage_runs_without_error(tmp_path: Path) -> None:
     }
     (tmp_path / "buildings.geojson").write_text(json.dumps(fc), encoding="utf-8")
     proc._stage_validate()  # should not raise
+
+
+# ── reclassify ────────────────────────────────────────────────────────────────
+
+
+def test_reclassify_clears_results_keeps_source_and_reruns(tmp_path: Path) -> None:
+    # A classified building tagged as an MS gap-filler, plus prior queues + state.
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+                "properties": {
+                    "building": "yes",
+                    "xplane_source": "ms",
+                    "xplane_confidence": 0.4,
+                    "xplane_stories": 2,
+                },
+            }
+        ],
+    }
+    (tmp_path / "buildings.geojson").write_text(json.dumps(fc), encoding="utf-8")
+    (tmp_path / "review_queue.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "resolved_queue.json").write_text("[]", encoding="utf-8")
+    for stage in STAGES:
+        _make_processor(tmp_path)._mark_done(stage)
+
+    _make_processor(tmp_path, reclassify=True)
+
+    props = json.loads((tmp_path / "buildings.geojson").read_text())["features"][0]["properties"]
+    assert props.get("xplane_source") == "ms"  # provenance preserved
+    assert "xplane_confidence" not in props  # result cleared
+    assert "xplane_stories" not in props
+    assert not (tmp_path / "review_queue.json").exists()
+    assert not (tmp_path / "resolved_queue.json").exists()
+
+    state = json.loads((tmp_path / "tile_state.json").read_text())["completed"]
+    for stage in ("classify", "review", "write_dsf", "validate"):
+        assert stage not in state
+    assert "fetch_osm" in state  # fetch/ortho data preserved
