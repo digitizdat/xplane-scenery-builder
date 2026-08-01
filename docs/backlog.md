@@ -30,33 +30,39 @@
     - [GATEWAY-001 — Explore X-Plane Scenery Gateway API as a data source](#gateway-001--explore-x-plane-scenery-gateway-api-as-a-data-source)
     - [WED-001 — Explore reusing or building on the WorldEditor (WED) codebase](#wed-001--explore-reusing-or-building-on-the-worldeditor-wed-codebase)
     - [SOURCE-001 — Supplement OSM with additional building footprint sources](#source-001--supplement-osm-with-additional-building-footprint-sources)
+    - [ATTRIB-001 — ODbL attribution in generated output packs](#attrib-001--odbl-attribution-in-generated-output-packs)
+    - [REVIEW-001 — Wire review decisions back into pipeline output](#review-001--wire-review-decisions-back-into-pipeline-output)
+    - [OSMBUILD-001 — Handle OSM building relations (multipolygons)](#osmbuild-001--handle-osm-building-relations-multipolygons)
 
 ---
 
 ## Current Backlog Analysis
 
-The backlog contains 19 items: 7 implemented and 12 proposed. The matrix below
-covers only the 12 open (proposed) items; completed items carry no remaining
-decision. Each item is rated on Impact (1-5) and Effort (1-5) from its backlog
-description, then ranked by ROI (impact / effort). These ratings are planning
-estimates and can be reweighted as priorities change.
+The backlog contains 23 items: 9 implemented, 1 in progress, and 13 proposed.
+The matrix below covers the 14 open items (in-progress + proposed). Items marked
+**Done** are recorded under Backlog Items for reference only.
+
+**Note**: this analysis was last updated 2026-07-27. Several items have changed
+status since the original matrix was written; see individual entries for details.
 
 ### Scoring
 
 | Rank | ID | Item | Impact | Effort | ROI | Notes |
 |------|-----|------|:------:|:------:|:---:|-------|
-| 1 | RENDER-001 | Missing buildings investigation | 5 | 2 | 2.5 | Core-output correctness bug; investigation is cheap |
-| 2 | CLASSIFY-001 | Reduce LLM escalation rate | 5 | 2 | 2.5 | Affects cost, quality, and review burden on every run; has a live Opus AccessDenied bug |
-| 3 | DDS-001 | DDS texture compression | 3 | 2 | 1.5 | 250 MB to ~50 MB, faster load; well-scoped |
-| 4 | WED-001 (LibraryMgr port) | Port WED library resolution | 4 | 3 | 1.33 | Correctness plus enabler; OBJ8 spike already done, de-risked |
-| 5 | RENDER-002 | Headless rendering | 4 | 4 | 1.0 | Strategic enabler that unblocks REFINE-001 and speeds visual QA |
-| 6 | ROAD-001 | Road classification granularity | 3 | 3 | 1.0 | Rural realism plus actually rendering .net roads |
-| 7 | GATEWAY-001 | Gateway API spike | 1 | 1 | 1.0 | Cheap, but GPLv2 blocks content use; marginal over OSM |
-| 8 | REFINE-001 | Closed-loop refinement | 4 | 5 | 0.8 | Highest payoff if realized; most ambitious; depends on RENDER-002 |
-| 9 | HEIGHT-001 | Shadow-based height estimation | 3 | 4 | 0.75 | Most buildings default to 8 m today; LLM shadow measurement is the risk |
-| 10 | ASSET-001 | Expanded asset placement | 3 | 4 | 0.75 | Phase 2; broad scope; benefits from WED-001 port first |
-| 11 | ALIGN-001 | Building footprint alignment | 2 | 4 | 0.5 | Backlog itself questions ROI; "accept and document" is a valid cheap path |
-| 12 | ROAD-003 | Road-to-ortho alignment | 2 | 4 | 0.5 | Competes with the shipped --no-roads approach; CV-heavy |
+| 1 | ATTRIB-001 | ODbL attribution in output packs | 3 | 1 | 3.0 | Distribution obligation (OSM + MS both ODbL); very cheap to emit |
+| 2 | CLASSIFY-001 | Reduce LLM escalation rate | 5 | 2 | 2.5 | **In progress** — crop fix done, MS-skip not yet built |
+| 3 | REVIEW-001 | Wire review apply-back + reject | 4 | 2 | 2.0 | Currently review does nothing; required before MS false-positive pruning works |
+| 4 | SOURCE-001 (relations) | Handle OSM building relations | 3 | 2 | 1.5 | Currently skipped in osm.py; separate source of missing buildings |
+| 5 | DDS-001 | DDS texture compression | 3 | 2 | 1.5 | 250 MB to ~50 MB; well-scoped one-flag change |
+| 6 | WED-001 (LibraryMgr port) | Port WED library resolution | 4 | 3 | 1.33 | OBJ8 spike done; enables ASSET-001 and Gateway-valid output |
+| 7 | RENDER-002 | Headless rendering | 4 | 4 | 1.0 | Strategic enabler; unblocks REFINE-001 |
+| 8 | ROAD-001 | Road classification granularity | 3 | 3 | 1.0 | Rural realism + actually rendering .net roads |
+| 9 | GATEWAY-001 | Gateway API spike | 1 | 1 | 1.0 | GPLv2 blocks content use; useful as reference only |
+| 10 | REFINE-001 | Closed-loop refinement | 4 | 5 | 0.8 | Moonshot; depends on RENDER-002 |
+| 11 | HEIGHT-001 | Shadow-based height estimation | 3 | 4 | 0.75 | LLM shadow measurement is the risk; spike first |
+| 12 | ASSET-001 | Expanded asset placement | 3 | 4 | 0.75 | Phase 2; needs WED-001 LibraryMgr port first |
+| 13 | ALIGN-001 | Building footprint alignment | 2 | 4 | 0.5 | MS-vs-OSM offset ~0.6 m; may not justify effort |
+| 14 | ROAD-003 | Road-to-ortho alignment | 2 | 4 | 0.5 | CV-heavy; partly superseded by --no-roads |
 
 ### Impact / Effort Matrix
 
@@ -65,55 +71,55 @@ estimates and can be reweighted as priorities change.
    ------------------------------------------- + -------------------------------------------
 H  |  QUICK WINS                               |  BIG BETS                                  |
 I  |                                           |                                            |
-G  |   RENDER-001   (missing buildings)        |   RENDER-002   (headless render, enabler)  |
-H  |   CLASSIFY-001 (LLM escalation)           |   REFINE-001   (closed-loop, moonshot)     |
+G  |   ATTRIB-001   (ODbL attribution)         |   RENDER-002   (headless render, enabler)  |
+H  |   CLASSIFY-001 (escalation, in progress)  |   REFINE-001   (closed-loop, moonshot)     |
+   |   REVIEW-001   (apply-back + reject)      |                                            |
    |   WED-001*     (LibraryMgr port)          |                                            |
 I  |                                           |                                            |
 M  | ------------------------------------------+------------------------------------------- |
 P  |                                           |                                            |
-A  |  INCREMENTAL / FILL-INS                   |  RECONSIDER / LOW ROI                       |
+A  |  INCREMENTAL / FILL-INS                   |  RECONSIDER / LOW ROI                      |
 C  |                                           |                                            |
 T  |   DDS-001      (compression)              |   HEIGHT-001  (shadow heights)             |
-   |   ROAD-001     (road granularity, center) |   ASSET-001   (expanded assets)            |
-L  |   GATEWAY-001  (spike, low value)         |   ALIGN-001   (building alignment)         |
-O  |                                           |   ROAD-003    (road alignment)             |
+   |   SOURCE-001   (OSM relations)            |   ASSET-001   (expanded assets)            |
+   |   ROAD-001     (road granularity)         |   ALIGN-001   (building alignment)         |
+L  |   GATEWAY-001  (reference only)           |   ROAD-003    (road alignment)             |
+O  |                                           |                                            |
 W  |                                           |                                            |
    ------------------------------------------- + -------------------------------------------
 
-* WED-001's LibraryMgr port is the self-contained, high-value slice. The full
-  item (render-engine reuse) belongs in BIG BETS alongside RENDER-002.
-  ROAD-001 sits near dead-center (medium/medium); placed in fill-ins by ROI.
+* WED-001's LibraryMgr port is the self-contained, high-value slice.
+  ROAD-001 sits near dead-center; placed in fill-ins by ROI.
 ```
 
 ### Recommended Sequencing
 
-1. **Do now (Quick Wins).** RENDER-001 first, because it is a correctness bug in
-   the core deliverable: buildings not rendering undermines everything else.
-   Then CLASSIFY-001, which fixes a live bug, cuts Bedrock cost, and reduces
-   review load on every run. Both are high-impact, low-effort. DDS-001 is an
-   easy follow-on.
-2. **Do next (strategic infrastructure).** The WED-001 LibraryMgr port. It is the
-   highest-ROI of the larger items, the OBJ8 spike already de-risked it, and it
-   unblocks ASSET-001 while keeping output Gateway-valid (never emitting
-   deprecated or private assets).
-3. **Plan deliberately (Big Bets).** RENDER-002 then REFINE-001 form a dependency
-   chain and represent the project's strategic direction: automated visual QA and
-   self-correction. RENDER-002 also pays back immediately by making
-   RENDER-001-style debugging faster. Commit only when ready for a multi-week
-   effort.
-4. **Defer or downscope (Low ROI).** ALIGN-001 and ROAD-003 are CV-heavy alignment
-   problems with modest payoff, and ROAD-003 partly duplicates the shipped
-   --no-roads feature. HEIGHT-001 is interesting but gated on unreliable LLM
-   shadow measurement; run a small spike before committing. GATEWAY-001 is cheap
-   but low-value given the GPLv2 content constraint; keep it reference-only.
+1. **Do now (active).** Complete CLASSIFY-001 validation: re-run with crop fix,
+   measure queue reduction. If queue is still >~50 after the crop fix, add the
+   MS-skip (don't classify/queue `xplane_source=ms` buildings). Then in-sim
+   visual confirmation of the MS-supplemented pack.
+2. **Quick wins next.** ATTRIB-001 (ODbL attribution — distribution obligation,
+   very cheap). REVIEW-001 (wire review apply-back + reject — currently review
+   does nothing; needed before MS false-positive pruning is useful). DDS-001
+   (one flag, 5x ortho size reduction). SOURCE-001 relations fix (few lines in
+   osm.py).
+3. **Strategic infrastructure.** WED-001 LibraryMgr port (enables ASSET-001,
+   Gateway-valid output). RENDER-002 (headless rendering — enables REFINE-001
+   and speeds visual QA). Commit only when ready for a multi-week effort.
+4. **Defer or downscope.** HEIGHT-001 (spike first). ALIGN-001 and ROAD-003
+   (share CV alignment machinery; MS-vs-OSM offset is ~0.6 m so may not justify
+   effort; build once if either is pursued). GATEWAY-001 (GPLv2 copyleft blocks
+   content use; keep as reference).
 
 ### Structural Dependencies
 
-- ALIGN-001 and ROAD-003 should be evaluated together, since both need the same
-  computer-vision alignment machinery. Build it once if either is pursued.
-- ASSET-001 depends on the WED-001 LibraryMgr port to handle asset types beyond
-  facades and forests, so sequence WED-001 before ASSET-001.
+- ASSET-001 depends on the WED-001 LibraryMgr port.
+- REFINE-001 depends on RENDER-002.
+- ALIGN-001 and ROAD-003 share alignment infrastructure; build once if pursued.
+- REVIEW-001 (apply-back) is a prerequisite for MS false-positive pruning to be
+  actionable: reject only matters if the pipeline honours it.
 
+---
 ---
 
 ## Backlog Items
@@ -418,7 +424,7 @@ Shadow-based: actual measured height per building from imagery.
 
 ### CLASSIFY-001 — Reduce LLM escalation rate
 
-**Status**: Proposed  
+**Status**: In Progress  
 **Priority**: High  
 **Source**: Green Bank classification run — 76/556 items queued for review
 
@@ -959,3 +965,104 @@ concern that applies equally to OSM and MS.
 ### Complexity
 
 Medium for a second vector source with de-dup; higher for ML detection.
+
+---
+
+## ATTRIB-001 — ODbL attribution in generated output packs
+
+**Status**: Proposed
+**Priority**: High (distribution obligation)
+**Source**: Discovered during SOURCE-001 — both OSM and Microsoft Building Footprints are ODbL
+
+### Problem
+
+OSM data (ODbL) requires attribution in any distributed work. Microsoft US
+Building Footprints are also ODbL. Generated scenery packs currently emit no
+attribution, which makes distribution technically non-compliant.
+
+### Solution
+
+Emit a `ATTRIBUTION.txt` (or `README.txt`) inside the scenery pack folder at
+write time, naming both sources. Content:
+
+```
+Building footprints: © OpenStreetMap contributors (ODbL 1.0)
+  https://www.openstreetmap.org/copyright
+Microsoft US Building Footprints (ODbL 1.0)
+  https://github.com/microsoft/USBuildingFootprints
+Satellite imagery: ESA WorldCover, Sentinel-2 (Copernicus), NAIP (public domain)
+```
+
+Only include MS attribution when `buildings_mode == "osm+ms"`.
+
+### Complexity
+
+Low — a few lines in `dsf.py` or `pipeline.py` at write_dsf stage.
+
+---
+
+## REVIEW-001 — Wire review decisions back into pipeline output
+
+**Status**: Proposed
+**Priority**: High (currently review does nothing)
+**Source**: Discovered during RENDER-001 investigation (2026-07-23)
+
+### Problem
+
+`review_queue.json` and `resolved_queue.json` are produced but never consumed.
+`load_resolved_decisions` in `review.py` has no callers. Human review decisions
+(including type overrides and future "reject / not a building") have no effect
+on the generated DSF. The review step is currently decorative.
+
+### Solution
+
+1. **Join key**: the classify stage should stamp `xplane_review_id` on each
+   classified feature (it already computes `sha256(patch)[:8]` internally —
+   propagate it to the GeoJSON feature). This links a review item back to its
+   source feature.
+2. **Apply step**: after the review stage, read `resolved_queue.json` and for
+   each matched feature either (a) override its `xplane_*` attributes with the
+   human decision, or (b) mark it `xplane_reject=true` if the decision is
+   "reject". The `write_dsf` stage already skips features accordingly once the
+   prop is there (small addition needed).
+3. **Reject semantics**: `human_decision == "reject"` → drop that feature from
+   the buildings/landcover GeoJSON before DSF write. This is the mechanism
+   needed to prune MS ML false positives.
+
+### Prerequisites
+
+REVIEW-001 is a prerequisite for MS false-positive pruning to be actionable.
+
+### Complexity
+
+Medium — join key propagation + apply step + reject handling in write_dsf.
+
+---
+
+## OSMBUILD-001 — Handle OSM building relations (multipolygons)
+
+**Status**: Proposed
+**Priority**: Medium
+**Source**: Discovered during SOURCE-001 — osm.py currently skips relation-type buildings
+
+### Problem
+
+`osm.py._extract_features` iterates only `result.ways`. OSM `relation`-type
+buildings (multipolygons, e.g. buildings with courtyard holes, complex footprints)
+are fetched by the query but silently dropped at extraction. These buildings never
+reach `buildings.geojson` and are therefore absent from the scenery.
+
+### Solution
+
+Extend `_extract_features` to also process `result.relations` where the relation
+type is `multipolygon` and tags include `building`. Use overpy's relation member
+geometry to construct the outer ring. Drop inner rings (holes) for now — DSF
+facade placement handles only simple outer rings.
+
+### Complexity
+
+Low to Medium — overpy exposes relation members; the tricky part is resolving
+member ways to node coordinates (requires the `>;` recurse step already in the
+query).
+
+---

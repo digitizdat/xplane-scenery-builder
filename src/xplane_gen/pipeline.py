@@ -227,6 +227,7 @@ class TileProcessor:
                 for f in fc.get("features", [])
                 if f.get("properties", {}).get("building") == "yes"
                 and "xplane_confidence" not in f.get("properties", {})
+                and f.get("properties", {}).get("xplane_source") != "ms"
             ]
             if ambiguous:
                 console.print(

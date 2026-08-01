@@ -283,14 +283,22 @@ class BedrockClassifier:
         result = self._call_model(_HAIKU, image_b64, prompt, tool_spec, tool_name, fallback)
         if result.get("confidence", 0) >= _HIGH:
             return result
+        best = result
 
         # Tier 2: Sonnet
         result = self._call_model(_SONNET, image_b64, prompt, tool_spec, tool_name, fallback)
         if result.get("confidence", 0) >= _LOW:
             return result
+        if result.get("confidence", 0) > best.get("confidence", 0):
+            best = result
 
-        # Tier 3: Opus
-        return self._call_model(_OPUS, image_b64, prompt, tool_spec, tool_name, fallback)
+        # Tier 3: Opus — if unavailable, return best seen so far rather than
+        # the zero-confidence fallback, so the Sonnet result is used instead of
+        # always queuing for review.
+        opus = self._call_model(_OPUS, image_b64, prompt, tool_spec, tool_name, fallback)
+        if opus is fallback:
+            return best
+        return opus
 
     def _call_model(
         self,
@@ -319,8 +327,9 @@ class BedrockClassifier:
                 toolConfig={"tools": [{"toolSpec": tool_spec}]},
             )
         except Exception as exc:  # noqa: BLE001
-            if "AccessDenied" in type(exc).__name__ or "AccessDenied" in str(exc):
-                console.print(f"[yellow]    ⚠ {model_id} not available — using fallback[/yellow]")
+            exc_str = f"{type(exc).__name__}: {exc}"
+            if any(s in exc_str for s in ("AccessDenied", "ValidationException")):
+                console.print(f"[yellow]    ⚠ {model_id} not available — skipping tier[/yellow]")
                 return fallback
             raise
 
