@@ -8,7 +8,12 @@ from rich.console import Console
 console = Console()
 
 
-@click.group(context_settings=dict(help_option_names=["-h", "-?", "--help"]))
+@click.group(
+    context_settings=dict(
+        help_option_names=["-h", "-?", "--help"],
+        max_content_width=110,
+    )
+)
 def cli() -> None:
     """X-Plane GenAI Scenery Generator."""
 
@@ -238,8 +243,8 @@ def review(queue: str, output: str) -> None:
 
 
 @cli.command("install", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
-@click.option("--pack", required=True, help="Path to the generated scenery pack folder.")
-@click.option("--name", default=None, help="Custom Scenery folder name (default: pack name).")
+@click.option("--path", "path", required=True, help="Path to the generated scenery pack folder.")
+@click.option("--name", default=None, help="Custom Scenery folder name (default: from --path).")
 @click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
 @click.option(
     "--position",
@@ -250,13 +255,13 @@ def review(queue: str, output: str) -> None:
 )
 @click.option("--force", is_flag=True, help="Replace an existing pack of the same name.")
 def install(
-    pack: str, name: str | None, xplane_path: str | None, position: str, force: bool
+    path: str, name: str | None, xplane_path: str | None, position: str, force: bool
 ) -> None:
     """Install a generated overlay pack into X-Plane's Custom Scenery."""
     from xplane_gen.scenery_install import SceneryInstallError, install_pack
 
     try:
-        dest = install_pack(pack, xplane_path, name, position, force=force)
+        dest = install_pack(path, xplane_path, name, position, force=force)
     except SceneryInstallError as exc:
         console.print(f"[red]{exc}[/red]")
         raise SystemExit(1) from exc

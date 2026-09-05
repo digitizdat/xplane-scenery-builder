@@ -119,7 +119,7 @@ def remove_entry(lines: list[str], name: str) -> tuple[list[str], bool]:
 
 
 def install_pack(
-    pack_dir: str | Path,
+    source: str | Path,
     xplane_path: str | Path | None = None,
     name: str | None = None,
     position: str = "above-global",
@@ -127,10 +127,10 @@ def install_pack(
 ) -> Path:
     """Copy a generated pack into Custom Scenery and register it in the ini."""
     xp = resolve_xplane_path(xplane_path)
-    pack_dir = Path(pack_dir)
-    if not (pack_dir / "Earth nav data").is_dir():
-        raise SceneryInstallError(f"{pack_dir} has no 'Earth nav data' directory")
-    name = _validate_pack_name(name or pack_dir.name)
+    source = Path(source)
+    if not (source / "Earth nav data").is_dir():
+        raise SceneryInstallError(f"{source} has no 'Earth nav data' directory")
+    name = _validate_pack_name(name or source.name)
     dest = xp / "Custom Scenery" / name
     if dest.exists():
         if not force:
@@ -138,7 +138,7 @@ def install_pack(
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     for sub in _CONTENT_SUBDIRS:
-        src = pack_dir / sub
+        src = source / sub
         if src.is_dir():
             shutil.copytree(src, dest / sub)
     ini = xp / "Custom Scenery" / "scenery_packs.ini"
