@@ -22,10 +22,114 @@ _HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 _SONNET = "us.anthropic.claude-sonnet-4-6"
 _OPUS = "us.anthropic.claude-opus-4-6-v1"
 
+# Models the classify stage depends on, in tier order.
+_REQUIRED_MODELS = (_HAIKU, _SONNET, _OPUS)
+
 # Confidence routing thresholds
 _HIGH = 0.85
 _LOW = 0.60
 _REVIEW_THRESHOLD = 0.75
+
+
+class BedrockPreflightError(RuntimeError):
+    """Raised when a required Bedrock model cannot be invoked."""
+
+
+class BedrockCredentialsError(RuntimeError):
+    """Raised when AWS credentials are missing or expired (no usable session)."""
+
+
+def _make_bedrock_client(region: str) -> Any:
+    """Create a bedrock-runtime client, mapping credential problems to a clean error."""
+    try:
+        return boto3.client("bedrock-runtime", region_name=region)
+    except Exception as exc:  # noqa: BLE001
+        raise BedrockCredentialsError(
+            "AWS credentials unavailable or expired. Reauthenticate "
+            "(aws sso login) or source session-environment.sh, then retry.\n"
+            f"  ({type(exc).__name__}: {exc})"
+        ) from exc
+
+
+def check_bedrock_access(region: str = "us-east-1") -> dict[str, str | None]:
+    """Verify each required model can be invoked via the Converse API.
+
+    Sends a tiny 1x1 image + minimal prompt to each model — the same call path
+    the classifier uses — so region, access, and inference-profile problems all
+    surface here rather than mid-run. Returns a mapping of ``model_id -> None``
+    (ok) or ``model_id -> error message``.
+
+    Raises BedrockCredentialsError if no usable AWS session exists (a single
+    upfront failure, distinct from per-model invocation errors). Otherwise does
+    not raise; callers decide policy on per-model failures.
+    """
+    import io as _io
+
+    from PIL import Image as _Image
+
+    client = _make_bedrock_client(region)
+    buf = _io.BytesIO()
+    _Image.new("RGB", (1, 1)).save(buf, format="PNG")
+    png = buf.getvalue()
+
+    results: dict[str, str | None] = {}
+    for model_id in _REQUIRED_MODELS:
+        try:
+            client.converse(
+                modelId=model_id,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"image": {"format": "png", "source": {"bytes": png}}},
+                            {"text": "Reply with OK."},
+                        ],
+                    }
+                ],
+                inferenceConfig={"maxTokens": 8},
+            )
+            results[model_id] = None
+        except Exception as exc:  # noqa: BLE001 — report any failure to the caller
+            # A credential error surfacing on the first call is a session problem,
+            # not a model problem — raise it clearly rather than per-model.
+            if _is_credential_error(exc):
+                raise BedrockCredentialsError(
+                    "AWS credentials unavailable or expired. Reauthenticate "
+                    "(aws sso login) or source session-environment.sh, then retry.\n"
+                    f"  ({type(exc).__name__}: {exc})"
+                ) from exc
+            results[model_id] = f"{type(exc).__name__}: {exc}"
+    return results
+
+
+def _is_credential_error(exc: Exception) -> bool:
+    name = type(exc).__name__
+    text = f"{name}: {exc}"
+    markers = (
+        "LoginTokenLoadError",
+        "NoCredentialsError",
+        "CredentialRetrievalError",
+        "TokenRetrievalError",
+        "UnauthorizedSSOTokenError",
+        "ExpiredToken",
+        "reauthenticate",
+    )
+    return any(m in text for m in markers)
+
+
+def require_bedrock_access(region: str = "us-east-1") -> None:
+    """Run the preflight check and raise BedrockPreflightError on any failure."""
+    results = check_bedrock_access(region)
+    failures = {m: msg for m, msg in results.items() if msg is not None}
+    if failures:
+        lines = "\n".join(f"  ✗ {m}\n      {msg}" for m, msg in failures.items())
+        raise BedrockPreflightError(
+            "Bedrock preflight failed — cannot invoke required model(s):\n"
+            f"{lines}\n"
+            "Check AWS credentials (aws sso login / source session-environment.sh), "
+            "region (us-east-1), and Bedrock model access."
+        )
+
 
 # ------------------------------------------------------------------ #
 # Tool specs for Bedrock Converse API                                  #

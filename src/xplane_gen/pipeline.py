@@ -182,6 +182,15 @@ class TileProcessor:
         if self.auto:
             return
 
+        # Preflight: verify Bedrock credentials and model access before the
+        # expensive classify loop, so auth/region/profile problems fail fast
+        # rather than silently degrading every escalation (see CLASSIFY-001).
+        from xplane_gen.classifier import require_bedrock_access
+
+        console.print("[cyan]Preflight: checking Bedrock model access…[/cyan]")
+        require_bedrock_access()
+        console.print("[green]  ✓ Bedrock models reachable[/green]")
+
         import threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
 

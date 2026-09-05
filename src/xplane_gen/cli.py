@@ -160,7 +160,13 @@ def generate(
         buildings_mode=buildings,
         reclassify=reclassify,
     )
-    proc.run()
+    from xplane_gen.classifier import BedrockCredentialsError, BedrockPreflightError
+
+    try:
+        proc.run()
+    except (BedrockPreflightError, BedrockCredentialsError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
 
 
 @cli.command("catalog", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
@@ -387,3 +393,26 @@ def validate_packs(xplane_path: str | None, build_dir: str) -> None:
         n_bad = sum(1 for s in statuses if s.issues)
         console.print(f"[red]{n_bad} of {len(statuses)} pack(s) have issues.[/red]")
         raise SystemExit(1)
+
+
+@cli.command("preflight", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
+@click.option("--region", default="us-east-1", show_default=True, help="AWS region for Bedrock.")
+def preflight(region: str) -> None:
+    """Verify Bedrock credentials and model access before a classification run."""
+    from xplane_gen.classifier import BedrockCredentialsError, check_bedrock_access
+
+    try:
+        results = check_bedrock_access(region)
+    except BedrockCredentialsError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
+
+    for model_id, err in results.items():
+        if err is None:
+            console.print(f"[green]✓ {model_id}[/green]")
+        else:
+            console.print(f"[red]✗ {model_id}[/red]\n    {err}")
+    if any(err is not None for err in results.values()):
+        console.print("[red]Bedrock preflight failed.[/red] Check region and Bedrock model access.")
+        raise SystemExit(1)
+    console.print(f"[green]All {len(results)} model(s) reachable.[/green]")

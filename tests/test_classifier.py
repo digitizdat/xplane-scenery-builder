@@ -13,8 +13,12 @@ from xplane_gen.classifier import (
     _OPUS,
     _SONNET,
     BedrockClassifier,
+    BedrockCredentialsError,
+    BedrockPreflightError,
     _cache_key,
     _parse_tool_response,
+    check_bedrock_access,
+    require_bedrock_access,
 )
 
 
@@ -234,3 +238,67 @@ def test_parse_tool_response_fallback_on_missing() -> None:
     fallback = {"building_type": "generic", "height_m": 8.0, "confidence": 0.0}
     result = _parse_tool_response(resp, "classify_building", fallback)
     assert result == fallback
+
+
+# ── Bedrock preflight ─────────────────────────────────────────────────────────
+
+
+def test_check_bedrock_access_all_ok() -> None:
+    fake = MagicMock()
+    fake.converse = MagicMock(return_value={"output": {"message": {"content": []}}})
+    with patch("boto3.client", return_value=fake):
+        results = check_bedrock_access()
+    assert set(results) == {_HAIKU, _SONNET, _OPUS}
+    assert all(v is None for v in results.values())
+    assert fake.converse.call_count == 3
+
+
+def test_check_bedrock_access_reports_failure() -> None:
+    def _converse(**kwargs):
+        if kwargs["modelId"] == _OPUS:
+            raise RuntimeError("ValidationException: on-demand not supported")
+        return {"output": {"message": {"content": []}}}
+
+    fake = MagicMock()
+    fake.converse = MagicMock(side_effect=_converse)
+    with patch("boto3.client", return_value=fake):
+        results = check_bedrock_access()
+    assert results[_HAIKU] is None
+    assert results[_SONNET] is None
+    assert results[_OPUS] is not None
+    assert "ValidationException" in results[_OPUS]
+
+
+def test_require_bedrock_access_raises_on_failure() -> None:
+    fake = MagicMock()
+    fake.converse = MagicMock(side_effect=RuntimeError("AccessDeniedException"))
+    with patch("boto3.client", return_value=fake):
+        try:
+            require_bedrock_access()
+        except BedrockPreflightError as exc:
+            assert "preflight failed" in str(exc).lower()
+        else:
+            raise AssertionError("expected BedrockPreflightError")
+
+
+def test_require_bedrock_access_passes_when_ok() -> None:
+    fake = MagicMock()
+    fake.converse = MagicMock(return_value={"output": {"message": {"content": []}}})
+    with patch("boto3.client", return_value=fake):
+        require_bedrock_access()  # should not raise
+
+
+def test_check_bedrock_access_raises_credentials_error() -> None:
+    # A LoginTokenLoadError on the first converse call is a session problem and
+    # should raise BedrockCredentialsError, not be reported as a per-model error.
+    fake = MagicMock()
+    fake.converse = MagicMock(
+        side_effect=RuntimeError("LoginTokenLoadError: reauthenticate with 'aws login'")
+    )
+    with patch("boto3.client", return_value=fake):
+        try:
+            check_bedrock_access()
+        except BedrockCredentialsError as exc:
+            assert "credentials" in str(exc).lower()
+        else:
+            raise AssertionError("expected BedrockCredentialsError")
