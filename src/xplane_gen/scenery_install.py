@@ -11,6 +11,7 @@ Reference: https://www.x-plane.com/kb/prioritization-scenery-packs/
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 GLOBAL_AIRPORTS_LINE = "SCENERY_PACK *GLOBAL_AIRPORTS*"
@@ -169,3 +170,141 @@ def uninstall_pack(
         shutil.rmtree(dest)
         removed_files = True
     return removed_line, removed_files
+
+
+# ------------------------------------------------------------------ #
+# Inspection: list and validate installed packs                       #
+# ------------------------------------------------------------------ #
+
+
+def _ini_entries(lines: list[str]) -> dict[str, bool]:
+    """Map each ``Custom Scenery/<name>/`` ref to enabled (True) / disabled (False).
+
+    Only entries under Custom Scenery are returned (skips *GLOBAL_AIRPORTS* and
+    absolute/other refs). The trailing slash is stripped from the name.
+    """
+    entries: dict[str, bool] = {}
+    for ln in lines:
+        s = ln.strip()
+        enabled = s.startswith("SCENERY_PACK ")
+        disabled = s.startswith("SCENERY_PACK_DISABLED ")
+        if not (enabled or disabled):
+            continue
+        ref = _line_pack_path(ln) or ""
+        if not ref.startswith("Custom Scenery/"):
+            continue
+        name = ref[len("Custom Scenery/") :].rstrip("/")
+        if name:
+            entries[name] = enabled
+    return entries
+
+
+def _newest_content_mtime(pack_dir: Path) -> float | None:
+    """Newest file mtime under the pack's scenery content dirs, or None if none."""
+    newest: float | None = None
+    for sub in _CONTENT_SUBDIRS:
+        root = pack_dir / sub
+        if not root.is_dir():
+            continue
+        for f in root.rglob("*"):
+            if f.is_file():
+                m = f.stat().st_mtime
+                if newest is None or m > newest:
+                    newest = m
+    return newest
+
+
+@dataclass
+class PackStatus:
+    """Health and freshness of one custom scenery pack."""
+
+    name: str
+    in_ini: bool
+    enabled: bool
+    folder_exists: bool
+    has_dsf: bool  # folder has an Earth nav data directory
+    stale: bool  # installed content older than the matching build
+    build_found: bool  # a matching build dir existed to compare against
+
+    @property
+    def healthy(self) -> bool:
+        """Registered, enabled, present on disk, and loadable (has DSF)."""
+        return self.in_ini and self.enabled and self.folder_exists and self.has_dsf
+
+    @property
+    def issues(self) -> list[str]:
+        problems: list[str] = []
+        if not self.folder_exists:
+            problems.append("folder missing (dangling ini entry)")
+        elif not self.has_dsf:
+            problems.append("no 'Earth nav data' (registered but loads no DSF)")
+        if self.folder_exists and not self.in_ini:
+            problems.append("not in scenery_packs.ini (orphan folder)")
+        if self.in_ini and not self.enabled:
+            problems.append("disabled")
+        if self.stale:
+            problems.append("older than build (stale)")
+        return problems
+
+
+def list_packs(
+    xplane_path: str | Path | None = None,
+    build_dir: str | Path | None = None,
+) -> list[PackStatus]:
+    """Return the status of every custom scenery pack (ini entries + folders).
+
+    A pack is included if it appears in scenery_packs.ini and/or exists as a
+    folder under Custom Scenery. Freshness is computed against a matching
+    ``<build_dir>/<name>/`` directory when one exists.
+    """
+    xp = resolve_xplane_path(xplane_path)
+    cs = xp / "Custom Scenery"
+    ini_entries = _ini_entries(read_ini(cs / "scenery_packs.ini"))
+
+    folders = (
+        {p.name for p in cs.iterdir() if p.is_dir() and not p.name.startswith(".")}
+        if cs.is_dir()
+        else set()
+    )
+
+    build_root = Path(build_dir) if build_dir is not None else None
+    names = sorted(set(ini_entries) | folders)
+    statuses: list[PackStatus] = []
+    for name in names:
+        folder = cs / name
+        folder_exists = name in folders
+        has_dsf = folder_exists and (folder / "Earth nav data").is_dir()
+
+        stale = False
+        build_found = False
+        if build_root is not None and folder_exists:
+            build_pack = build_root / name
+            if build_pack.is_dir():
+                build_found = True
+                inst_m = _newest_content_mtime(folder)
+                build_m = _newest_content_mtime(build_pack)
+                if inst_m is not None and build_m is not None and build_m > inst_m:
+                    stale = True
+
+        statuses.append(
+            PackStatus(
+                name=name,
+                in_ini=name in ini_entries,
+                enabled=ini_entries.get(name, False),
+                folder_exists=folder_exists,
+                has_dsf=has_dsf,
+                stale=stale,
+                build_found=build_found,
+            )
+        )
+    return statuses
+
+
+def validate_packs(
+    xplane_path: str | Path | None = None,
+    build_dir: str | Path | None = None,
+) -> tuple[list[PackStatus], bool]:
+    """Return (statuses, ok) where ok is False if any pack is unhealthy or stale."""
+    statuses = list_packs(xplane_path, build_dir)
+    ok = all(not s.issues for s in statuses)
+    return statuses, ok

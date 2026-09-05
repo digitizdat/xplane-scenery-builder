@@ -296,3 +296,94 @@ def uninstall(name: str, xplane_path: str | None, keep_files: bool, yes: bool) -
     if removed_files:
         console.print(f"[green]Deleted Custom Scenery/{name}/.[/green]")
     console.print("Restart X-Plane 12 for the change to take effect.")
+
+
+@cli.command("list-packs", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
+@click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
+@click.option(
+    "--build-dir",
+    default="output",
+    show_default=True,
+    help="Build directory to compare installed packs against for freshness.",
+)
+def list_packs(xplane_path: str | None, build_dir: str) -> None:
+    """List installed custom scenery packs and their status."""
+    from rich.table import Table
+
+    from xplane_gen.scenery_install import SceneryInstallError
+    from xplane_gen.scenery_install import list_packs as _list_packs
+
+    try:
+        statuses = _list_packs(xplane_path, build_dir)
+    except SceneryInstallError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
+
+    if not statuses:
+        console.print("[yellow]No custom scenery packs found.[/yellow]")
+        return
+
+    table = Table(title="Custom Scenery Packs")
+    table.add_column("Pack")
+    table.add_column("In .ini")
+    table.add_column("Enabled")
+    table.add_column("Folder")
+    table.add_column("DSF")
+    table.add_column("Freshness")
+    for s in statuses:
+        if not s.build_found:
+            fresh = "[dim]no build[/dim]"
+        elif s.stale:
+            fresh = "[yellow]stale[/yellow]"
+        else:
+            fresh = "[green]current[/green]"
+        table.add_row(
+            s.name,
+            "✓" if s.in_ini else "[red]✗[/red]",
+            ("✓" if s.enabled else "[yellow]disabled[/yellow]") if s.in_ini else "-",
+            "✓" if s.folder_exists else "[red]✗[/red]",
+            "✓" if s.has_dsf else "[red]✗[/red]",
+            fresh,
+        )
+    console.print(table)
+
+
+@cli.command("validate-packs", context_settings=dict(help_option_names=["-h", "-?", "--help"]))
+@click.option("--xplane-path", default=None, help="X-Plane 12 dir (auto-detected if omitted).")
+@click.option(
+    "--build-dir",
+    default="output",
+    show_default=True,
+    help="Build directory to compare installed packs against for freshness.",
+)
+def validate_packs(xplane_path: str | None, build_dir: str) -> None:
+    """Validate installed packs are healthy and not older than the build.
+
+    Exits non-zero if any pack is broken (missing folder or DSF, orphaned,
+    disabled) or stale (installed content older than the matching build).
+    """
+    from xplane_gen.scenery_install import SceneryInstallError
+    from xplane_gen.scenery_install import validate_packs as _validate_packs
+
+    try:
+        statuses, ok = _validate_packs(xplane_path, build_dir)
+    except SceneryInstallError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from exc
+
+    if not statuses:
+        console.print("[yellow]No custom scenery packs found.[/yellow]")
+        return
+
+    for s in statuses:
+        if s.issues:
+            console.print(f"[red]✗ {s.name}[/red]: {'; '.join(s.issues)}")
+        else:
+            console.print(f"[green]✓ {s.name}[/green]")
+
+    if ok:
+        console.print(f"[green]All {len(statuses)} pack(s) healthy and current.[/green]")
+    else:
+        n_bad = sum(1 for s in statuses if s.issues)
+        console.print(f"[red]{n_bad} of {len(statuses)} pack(s) have issues.[/red]")
+        raise SystemExit(1)

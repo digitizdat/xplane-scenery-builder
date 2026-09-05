@@ -10,10 +10,12 @@ from xplane_gen.scenery_install import (
     _validate_pack_name,
     add_entry,
     install_pack,
+    list_packs,
     read_ini,
     remove_entry,
     resolve_xplane_path,
     uninstall_pack,
+    validate_packs,
 )
 
 
@@ -186,3 +188,104 @@ def test_uninstall_keep_files(tmp_path: Path) -> None:
     removed_line, removed_files = uninstall_pack("mypack", xp, delete_files=False)
     assert removed_line and not removed_files
     assert (xp / "Custom Scenery" / "mypack").exists()
+
+
+# ── list_packs / validate_packs ─────────────────────────────────────────────
+
+
+def _status_by_name(statuses: list, name: str):
+    return next(s for s in statuses if s.name == name)
+
+
+def test_list_packs_healthy(tmp_path: Path) -> None:
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global())
+    install_pack(_make_pack(tmp_path / "src"), xp, name="mypack")
+
+    statuses = list_packs(xp)
+    s = _status_by_name(statuses, "mypack")
+    assert s.healthy
+    assert s.in_ini and s.enabled and s.folder_exists and s.has_dsf
+    assert s.issues == []
+
+
+def test_list_packs_dangling_ini_entry(tmp_path: Path) -> None:
+    # ini references a pack that has no folder on disk
+    ini = _ini_with_global() + ["SCENERY_PACK Custom Scenery/ghost/"]
+    xp = _make_xplane(tmp_path / "xp", ini)
+
+    s = _status_by_name(list_packs(xp), "ghost")
+    assert s.in_ini and not s.folder_exists
+    assert "folder missing (dangling ini entry)" in s.issues
+
+
+def test_list_packs_orphan_folder(tmp_path: Path) -> None:
+    # folder present but not registered in the ini
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global())
+    orphan = xp / "Custom Scenery" / "orphan" / "Earth nav data"
+    orphan.mkdir(parents=True)
+
+    s = _status_by_name(list_packs(xp), "orphan")
+    assert s.folder_exists and not s.in_ini
+    assert "not in scenery_packs.ini (orphan folder)" in s.issues
+
+
+def test_list_packs_missing_dsf(tmp_path: Path) -> None:
+    # registered folder present but no Earth nav data (the flatten bug)
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global() + ["SCENERY_PACK Custom Scenery/broken/"])
+    (xp / "Custom Scenery" / "broken").mkdir()
+
+    s = _status_by_name(list_packs(xp), "broken")
+    assert s.folder_exists and not s.has_dsf
+    assert any("Earth nav data" in i for i in s.issues)
+
+
+def test_list_packs_disabled(tmp_path: Path) -> None:
+    ini = _ini_with_global() + ["SCENERY_PACK_DISABLED Custom Scenery/off/"]
+    xp = _make_xplane(tmp_path / "xp", ini)
+    (xp / "Custom Scenery" / "off" / "Earth nav data").mkdir(parents=True)
+
+    s = _status_by_name(list_packs(xp), "off")
+    assert s.in_ini and not s.enabled
+    assert "disabled" in s.issues
+
+
+def test_validate_packs_flags_stale(tmp_path: Path) -> None:
+    import os
+    import time
+
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global())
+    build = tmp_path / "build"
+    install_pack(_make_pack(build, name="mypack"), xp, name="mypack")
+
+    # Make the build content newer than the installed copy.
+    newer = time.time() + 100
+    for f in (build / "mypack" / "Earth nav data" / "+30-080").glob("*"):
+        os.utime(f, (newer, newer))
+
+    statuses, ok = validate_packs(xp, build)
+    s = _status_by_name(statuses, "mypack")
+    assert s.build_found and s.stale
+    assert "older than build (stale)" in s.issues
+    assert not ok
+
+
+def test_validate_packs_ok_when_current(tmp_path: Path) -> None:
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global())
+    build = tmp_path / "build"
+    # install AFTER creating build, so installed copy is at least as new
+    install_pack(_make_pack(build, name="mypack"), xp, name="mypack")
+
+    statuses, ok = validate_packs(xp, build)
+    s = _status_by_name(statuses, "mypack")
+    assert s.build_found and not s.stale
+    # "Some Airport" / "z_base_mesh" from the ini have no folder -> unhealthy,
+    # so overall ok is False; but mypack itself is clean.
+    assert s.issues == []
+
+
+def test_list_packs_no_build_dir_skips_freshness(tmp_path: Path) -> None:
+    xp = _make_xplane(tmp_path / "xp", _ini_with_global())
+    install_pack(_make_pack(tmp_path / "src"), xp, name="mypack")
+
+    s = _status_by_name(list_packs(xp, build_dir=None), "mypack")
+    assert not s.build_found and not s.stale
